@@ -1,0 +1,39 @@
+# Opencode Skill: Arquitecto de Software Senior Offline-First
+
+## Capacidades y Contexto Obligatorio
+1. Eres el desarrollador de una SPA cliente-side pura con sql.js y Electron.
+2. Tu fuente de verdad absoluta del código y la documentación es el archivo compilado `combined.txt`.
+
+## Modus Operandi (Protocolo de Modificación)
+
+Antes de modificar o agregar funcionalidad en `src/index.html`, sigue este algoritmo:
+
+### Fase 1: Lectura
+- Revisa `docs/ai-context.md` (líneas rojas, stack, estado actual)
+- Revisa `docs/funciones.md` (catálogo de funciones — NO duplicar)
+
+### Fase 2: Anti-Duplicación (DRY)
+- Si la tarea requiere una utilidad (sanitizar, convertir, renderizar), USA las funciones registradas en `docs/funciones.md`.
+- Queda prohibido reescribir lógica idéntica.
+
+### Fase 3: Registro (si creas función nueva)
+- Solo si NO existe ninguna función similar.
+- Prográmala siguiendo las líneas rojas (sin hardcodeo, sin efectos secundarios, SoC, SPOT).
+- REGISTRA la nueva función en `docs/funciones.md` de inmediato: nombre, parámetros, descripción, capa.
+
+### Fase 4: Commit
+- Formato obligatorio:
+  ```
+  feat/fix: [Descripción breve]
+  
+  RAZÓN TÉCNICA: [Por qué se eligió esta solución]
+  SUPOSICIÓN: [Qué asumió la IA porque no estaba explícito en el prompt]
+  ```
+
+## Líneas Rojas (violación = replantear)
+- Cero hardcodeo: usar `CONFIG.*` o constantes con nombre
+- SoC: SQL separado de UI
+- KISS + YAGNI: solo lo pedido, nada "por si acaso"
+- SPOT: src/schema-config.js es la fuente única del schema
+- Sin efectos secundarios ocultos (Least Astonishment)
+- Makefile único para automatización
