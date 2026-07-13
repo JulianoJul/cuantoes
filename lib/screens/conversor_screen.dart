@@ -128,6 +128,7 @@ class _ConversorBody extends StatelessWidget {
 
   Widget _buildEntrada(ConversorViewmodel vm) {
     return TextField(
+      controller: vm.entradaController,
       onChanged: vm.setEntrada,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       textAlign: TextAlign.center,

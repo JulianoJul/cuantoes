@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import '../models/tasa_bcv.dart';
 import '../services/tasa_repository.dart';
 
@@ -8,6 +8,7 @@ enum EstadoTasa { cargando, listo, error }
 
 class ConversorViewmodel extends ChangeNotifier {
   final TasaRepository _repository;
+  final entradaController = TextEditingController();
 
   TasaBcv? _tasa;
   EstadoTasa _estado = EstadoTasa.cargando;
@@ -102,6 +103,7 @@ class ConversorViewmodel extends ChangeNotifier {
 
     if (_tasa != null && _resultado.isNotEmpty) {
       _entrada = _resultado;
+      entradaController.text = _resultado;
       convertir();
     }
     notifyListeners();
@@ -130,5 +132,11 @@ class ConversorViewmodel extends ChangeNotifier {
 
     _resultado = res.toStringAsFixed(2);
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    entradaController.dispose();
+    super.dispose();
   }
 }
