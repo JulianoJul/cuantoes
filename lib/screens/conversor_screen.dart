@@ -95,7 +95,10 @@ class _ConversorBody extends StatelessWidget {
 
   Widget _buildSelectorFecha(
       BuildContext context, ConversorViewmodel vm, DateFormat formatter) {
+    if (vm.moneda == 'USDT') return const SizedBox.shrink();
+
     final label =
+        vm.esFechaHoy ? 'Hoy' : formatter.format(vm.fechaSeleccionada!);
         vm.esFechaHoy ? 'Hoy' : formatter.format(vm.fechaSeleccionada!);
 
     return Row(
@@ -237,7 +240,7 @@ class _ConversorBody extends StatelessWidget {
               ],
               const SizedBox(height: 6),
               Text(
-                dateFormatter.format(t.fecha),
+                dateFormatter.format(t.fechaEfectiva),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.onPrimaryContainer
                           .withValues(alpha: 0.6),

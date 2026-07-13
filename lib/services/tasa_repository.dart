@@ -14,7 +14,7 @@ class TasaRepository {
 
   Future<TasaBcv> obtenerTasa() async {
     final cache = await _cache.obtenerTasa();
-    if (cache != null && _esTasaVigente(cache.fecha)) {
+    if (cache != null && _esTasaVigente(cache.fechaEfectiva)) {
       return cache;
     }
 
@@ -49,14 +49,14 @@ class TasaRepository {
     }
   }
 
-  bool _esTasaVigente(DateTime fecha) {
+  bool _esTasaVigente(DateTime fechaEfectiva) {
     final ahora = DateTime.now();
-    final mismoDia = fecha.year == ahora.year &&
-        fecha.month == ahora.month &&
-        fecha.day == ahora.day;
 
-    if (!mismoDia) return false;
+    if (ahora.hour >= 17) return false;
 
-    return ahora.hour < 22;
+    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
+    if (fechaEfectiva.isBefore(hoy)) return false;
+
+    return true;
   }
 }
