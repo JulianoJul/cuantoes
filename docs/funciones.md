@@ -24,13 +24,15 @@
 
 | Clase/Método | Descripción |
 |-------------|-------------|
+| `ConversorViewmodel.entradaController` | `TextEditingController` vinculado al TextField |
 | `ConversorViewmodel.cargarTasa()` | Obtiene tasa (hoy o histórica según fecha) |
 | `ConversorViewmodel.setMoneda(moneda)` | Cambia moneda (USD/EUR), recalcula |
 | `ConversorViewmodel.seleccionarFecha(fecha)` | Fecha histórica, dispara carga |
 | `ConversorViewmodel.volverAHoy()` | Limpia fecha, carga tasa actual |
 | `ConversorViewmodel.setEntrada(valor)` | Actualiza entrada y dispara conversión |
-| `ConversorViewmodel.toggleDireccion()` | Invierte dirección, usa resultado como entrada |
+| `ConversorViewmodel.toggleDireccion()` | Invierte dirección, resultado → entrada |
 | `ConversorViewmodel.convertir()` | Convierte según dirección y moneda |
+| `ConversorViewmodel.dispose()` | Libera `entradaController` |
 
 ## Enums
 

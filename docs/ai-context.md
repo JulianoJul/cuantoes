@@ -27,8 +27,8 @@ App Flutter para convertir USD/EUR↔VES usando la tasa oficial del BCV. Soporta
 | `lib/services/bcv_scraper_service.dart` | Scraping HTML del BCV (fallback) |
 | `lib/services/bcv_cache_service.dart` | Cache local con SharedPreferences |
 | `lib/services/tasa_repository.dart` | Orquestador: API → scraping → cache |
-| `lib/viewmodels/conversor_viewmodel.dart` | Estado: moneda, fecha, conversión |
-| `lib/screens/conversor_screen.dart` | UI: tabs USD/EUR, calendario, conversor |
+| `lib/viewmodels/conversor_viewmodel.dart` | Estado: moneda, fecha, conversión, TextEditingController |
+| `lib/screens/conversor_screen.dart` | UI: tabs USD/EUR, calendario, conversor, icono $ |
 | `pubspec.yaml` | Dependencias del proyecto |
 
 ## Comandos
