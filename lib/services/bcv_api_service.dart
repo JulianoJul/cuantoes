@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/tasa_bcv.dart';
+import '../models/tasa_usdt.dart';
 
 class BcvApiService {
   static const _baseUrl = 'https://dolar-vzla.rafnixg.dev/api/v1';
@@ -38,6 +39,24 @@ class BcvApiService {
       eur: eur,
       fecha: fecha ?? DateTime.now(),
       origen: 'api',
+    );
+  }
+
+  Future<TasaUsdt> obtenerTasaUsdt() async {
+    final response = await http.get(Uri.parse('$_baseUrl/binance/realtime_ves'));
+
+    if (response.statusCode != 200) {
+      throw Exception('Error al obtener USDT: HTTP ${response.statusCode}');
+    }
+
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final average = (data['average_price'] as num).toDouble();
+    final median = (data['median_price'] as num).toDouble();
+
+    return TasaUsdt(
+      usdt: median,
+      promedio: average,
+      fecha: DateTime.now(),
     );
   }
 

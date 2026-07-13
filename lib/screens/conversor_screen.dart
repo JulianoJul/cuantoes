@@ -32,18 +32,20 @@ class _ConversorBody extends StatelessWidget {
             children: [
               const SizedBox(height: 20),
               _buildHeader(),
-              const SizedBox(height: 24),
-              _buildSelectorMoneda(context, vm),
               const SizedBox(height: 12),
+              _buildSelectorFuente(vm),
+              const SizedBox(height: 8),
+              _buildSelectorMoneda(context, vm),
+              const SizedBox(height: 8),
               _buildSelectorFecha(context, vm, dateFormatter),
-              const SizedBox(height: 24),
-              _buildEntrada(vm),
-              const SizedBox(height: 24),
-              _buildSwapButton(vm),
-              const SizedBox(height: 24),
-              _buildResultado(vm, formatter),
               const SizedBox(height: 20),
-              _buildEstadoBcv(context, vm, formatter),
+              _buildEntrada(vm),
+              const SizedBox(height: 20),
+              _buildSwapButton(vm),
+              const SizedBox(height: 20),
+              _buildResultado(vm, formatter),
+              const SizedBox(height: 16),
+              _buildEstadoTasas(context, vm, formatter),
               const Spacer(),
               _buildOrigen(vm),
               _buildBotonRecargar(vm),
@@ -61,14 +63,28 @@ class _ConversorBody extends StatelessWidget {
         Icon(Icons.currency_exchange, size: 40),
         SizedBox(height: 6),
         Text(
-          'Tasa BCV',
+          'Tasas',
           style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
         ),
       ],
     );
   }
 
+  Widget _buildSelectorFuente(ConversorViewmodel vm) {
+    return SegmentedButton<FuenteTasa>(
+      segments: const [
+        ButtonSegment(value: FuenteTasa.bcv, label: Text('BCV')),
+        ButtonSegment(value: FuenteTasa.usdt, label: Text('Binance P2P')),
+      ],
+      selected: {vm.fuente},
+      onSelectionChanged: (selected) => vm.setFuente(selected.first),
+      style: const ButtonStyle(visualDensity: VisualDensity.compact),
+    );
+  }
+
   Widget _buildSelectorMoneda(BuildContext context, ConversorViewmodel vm) {
+    if (!vm.esBcv) return const SizedBox.shrink();
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -92,7 +108,10 @@ class _ConversorBody extends StatelessWidget {
 
   Widget _buildSelectorFecha(
       BuildContext context, ConversorViewmodel vm, DateFormat formatter) {
-    final label = vm.esFechaHoy ? 'Hoy' : formatter.format(vm.fechaSeleccionada!);
+    if (!vm.esBcv) return const SizedBox.shrink();
+
+    final label =
+        vm.esFechaHoy ? 'Hoy' : formatter.format(vm.fechaSeleccionada!);
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -142,7 +161,8 @@ class _ConversorBody extends StatelessWidget {
 
   Widget _buildSwapButton(ConversorViewmodel vm) {
     return IconButton.filled(
-      onPressed: vm.tasa != null ? vm.toggleDireccion : null,
+      onPressed:
+          (vm.tasa != null || vm.tasaUsdt != null) ? vm.toggleDireccion : null,
       icon: const Icon(Icons.swap_vert),
     );
   }
@@ -173,7 +193,7 @@ class _ConversorBody extends StatelessWidget {
     );
   }
 
-  Widget _buildEstadoBcv(
+  Widget _buildEstadoTasas(
       BuildContext context, ConversorViewmodel vm, NumberFormat formatter) {
     final dateFormatter = DateFormat('dd/MM/yyyy');
 
@@ -198,43 +218,86 @@ class _ConversorBody extends StatelessWidget {
           ),
         );
       case EstadoTasa.listo:
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primaryContainer,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'USD 1 = Bs. ${formatter.format(vm.tasa!.usd)}',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  const SizedBox(width: 16),
-                  Text(
-                    'EUR 1 = Bs. ${formatter.format(vm.tasa!.eur)}',
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                ],
+        return Column(
+          children: [
+            if (vm.tasa != null)
+              _cardTasa(
+                context,
+                label: 'BCV',
+                contenido:
+                    'USD 1 = Bs. ${formatter.format(vm.tasa!.usd)}  ·  EUR 1 = Bs. ${formatter.format(vm.tasa!.eur)}',
+                fecha: dateFormatter.format(vm.tasa!.fecha),
+                selected: vm.esBcv,
               ),
-              const SizedBox(height: 4),
-              Text(
-                dateFormatter.format(vm.tasa!.fecha),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onPrimaryContainer
-                          .withValues(alpha: 0.6),
-                    ),
+            if (vm.tasaUsdt != null) ...[
+              const SizedBox(height: 8),
+              _cardTasa(
+                context,
+                label: 'Binance P2P',
+                contenido:
+                    'USDT 1 = Bs. ${formatter.format(vm.tasaUsdt!.usdt)}',
+                fecha: dateFormatter.format(vm.tasaUsdt!.fecha),
+                selected: !vm.esBcv,
               ),
             ],
-          ),
+          ],
         );
     }
+  }
+
+  Widget _cardTasa(BuildContext context,
+      {required String label,
+      required String contenido,
+      required String fecha,
+      required bool selected}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+      decoration: BoxDecoration(
+        color: selected
+            ? Theme.of(context).colorScheme.primaryContainer
+            : Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+        border: selected
+            ? Border.all(
+                color: Theme.of(context).colorScheme.primary, width: 1.5)
+            : null,
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: selected
+                  ? Theme.of(context).colorScheme.primary
+                  : Colors.grey,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              label,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(contenido,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500)),
+                Text(fecha,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.grey.shade600)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildOrigen(ConversorViewmodel vm) {
@@ -264,7 +327,7 @@ class _ConversorBody extends StatelessWidget {
     return TextButton.icon(
       onPressed: () => vm.cargarTasa(),
       icon: const Icon(Icons.refresh, size: 18),
-      label: const Text('Actualizar tasa'),
+      label: const Text('Actualizar tasas'),
     );
   }
 }
