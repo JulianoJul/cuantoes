@@ -22,6 +22,7 @@ class _ConversorBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final vm = context.watch<ConversorViewmodel>();
     final formatter = NumberFormat('#,##0.00', 'es_VE');
+    final dateFormatter = DateFormat('dd/MM/yyyy');
 
     return Scaffold(
       body: SafeArea(
@@ -29,11 +30,15 @@ class _ConversorBody extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           child: Column(
             children: [
-              const SizedBox(height: 40),
+              const SizedBox(height: 20),
               _buildHeader(),
-              const SizedBox(height: 32),
-              _buildEntrada(vm, formatter),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
+              _buildSelectorMoneda(context, vm),
+              const SizedBox(height: 12),
+              _buildSelectorFecha(context, vm, dateFormatter),
+              const SizedBox(height: 24),
+              _buildEntrada(vm),
+              const SizedBox(height: 24),
               _buildSwapButton(vm),
               const SizedBox(height: 24),
               _buildResultado(vm, formatter),
@@ -41,7 +46,7 @@ class _ConversorBody extends StatelessWidget {
               _buildEstadoBcv(context, vm, formatter),
               const Spacer(),
               _buildOrigen(vm),
-              _buildBotonRecargar(context, vm),
+              _buildBotonRecargar(vm),
               const SizedBox(height: 12),
             ],
           ),
@@ -53,11 +58,115 @@ class _ConversorBody extends StatelessWidget {
   Widget _buildHeader() {
     return const Column(
       children: [
-        Icon(Icons.currency_exchange, size: 48),
-        SizedBox(height: 8),
+        Icon(Icons.currency_exchange, size: 40),
+        SizedBox(height: 6),
         Text(
           'Tasa BCV',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSelectorMoneda(BuildContext context, ConversorViewmodel vm) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _chipMoneda(context, vm, 'USD'),
+        const SizedBox(width: 12),
+        _chipMoneda(context, vm, 'EUR'),
+      ],
+    );
+  }
+
+  Widget _chipMoneda(
+      BuildContext context, ConversorViewmodel vm, String moneda) {
+    final selected = vm.moneda == moneda;
+    return ChoiceChip(
+      label: Text(moneda),
+      selected: selected,
+      onSelected: (_) => vm.setMoneda(moneda),
+      selectedColor: Theme.of(context).colorScheme.primaryContainer,
+    );
+  }
+
+  Widget _buildSelectorFecha(
+      BuildContext context, ConversorViewmodel vm, DateFormat formatter) {
+    final label = vm.esFechaHoy ? 'Hoy' : formatter.format(vm.fechaSeleccionada!);
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (!vm.esFechaHoy)
+          IconButton(
+            onPressed: () => vm.volverAHoy(),
+            icon: const Icon(Icons.today, size: 20),
+            tooltip: 'Volver a hoy',
+          ),
+        TextButton.icon(
+          onPressed: () => _abrirCalendario(context, vm),
+          icon: const Icon(Icons.calendar_today, size: 18),
+          label: Text(label),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _abrirCalendario(
+      BuildContext context, ConversorViewmodel vm) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: vm.fechaSeleccionada ?? DateTime.now(),
+      firstDate: DateTime(2016, 1, 1),
+      lastDate: DateTime.now(),
+      locale: const Locale('es'),
+    );
+    if (picked != null) {
+      await vm.seleccionarFecha(picked);
+    }
+  }
+
+  Widget _buildEntrada(ConversorViewmodel vm) {
+    return TextField(
+      onChanged: vm.setEntrada,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      textAlign: TextAlign.center,
+      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w600),
+      decoration: InputDecoration(
+        labelText: vm.labelOrigen,
+        border: const OutlineInputBorder(),
+      ),
+    );
+  }
+
+  Widget _buildSwapButton(ConversorViewmodel vm) {
+    return IconButton.filled(
+      onPressed: vm.tasa != null ? vm.toggleDireccion : null,
+      icon: const Icon(Icons.swap_vert),
+    );
+  }
+
+  Widget _buildResultado(ConversorViewmodel vm, NumberFormat formatter) {
+    if (vm.resultado.isEmpty) {
+      return Text(
+        vm.labelDestino,
+        style: TextStyle(fontSize: 18, color: Colors.grey.shade500),
+      );
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          vm.esMonedaAVes ? 'Bs. ' : '${vm.moneda} ',
+          style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+        ),
+        Flexible(
+          child: Text(
+            formatter.format(double.parse(vm.resultado.replaceAll(',', '.'))),
+            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w600),
+            textAlign: TextAlign.center,
+          ),
         ),
       ],
     );
@@ -65,6 +174,8 @@ class _ConversorBody extends StatelessWidget {
 
   Widget _buildEstadoBcv(
       BuildContext context, ConversorViewmodel vm, NumberFormat formatter) {
+    final dateFormatter = DateFormat('dd/MM/yyyy');
+
     switch (vm.estado) {
       case EstadoTasa.cargando:
         return const SizedBox(
@@ -88,27 +199,32 @@ class _ConversorBody extends StatelessWidget {
       case EstadoTasa.listo:
         return Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.primaryContainer,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
             children: [
-              Text(
-                'USD 1 = Bs. ${formatter.format(vm.tasa!.usd)}',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'USD 1 = Bs. ${formatter.format(vm.tasa!.usd)}',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(width: 16),
+                  Text(
+                    'EUR 1 = Bs. ${formatter.format(vm.tasa!.eur)}',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ],
               ),
               const SizedBox(height: 4),
               Text(
-                'EUR 1 = Bs. ${formatter.format(vm.tasa!.eur)}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                DateFormat('dd/MM/yyyy HH:mm').format(vm.tasa!.fecha),
+                dateFormatter.format(vm.tasa!.fecha),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.onPrimaryContainer
                           .withValues(alpha: 0.6),
@@ -118,52 +234,6 @@ class _ConversorBody extends StatelessWidget {
           ),
         );
     }
-  }
-
-  Widget _buildSwapButton(ConversorViewmodel vm) {
-    return IconButton.filled(
-      onPressed: vm.tasa != null ? vm.toggleDireccion : null,
-      icon: const Icon(Icons.swap_vert),
-    );
-  }
-
-  Widget _buildEntrada(ConversorViewmodel vm, NumberFormat formatter) {
-    return TextField(
-      onChanged: vm.setEntrada,
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      textAlign: TextAlign.center,
-      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w600),
-      decoration: InputDecoration(
-        labelText: vm.labelOrigen,
-        border: const OutlineInputBorder(),
-      ),
-    );
-  }
-
-  Widget _buildResultado(ConversorViewmodel vm, NumberFormat formatter) {
-    if (vm.resultado.isEmpty) {
-      return Text(
-        vm.labelDestino,
-        style: TextStyle(fontSize: 18, color: Colors.grey.shade500),
-      );
-    }
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(
-          'Bs. ',
-          style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
-        ),
-        Flexible(
-          child: Text(
-            formatter.format(double.parse(vm.resultado.replaceAll(',', '.'))),
-            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w600),
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ],
-    );
   }
 
   Widget _buildOrigen(ConversorViewmodel vm) {
@@ -189,8 +259,7 @@ class _ConversorBody extends StatelessWidget {
     );
   }
 
-  Widget _buildBotonRecargar(
-      BuildContext context, ConversorViewmodel vm) {
+  Widget _buildBotonRecargar(ConversorViewmodel vm) {
     return TextButton.icon(
       onPressed: () => vm.cargarTasa(),
       icon: const Icon(Icons.refresh, size: 18),

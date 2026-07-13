@@ -12,24 +12,29 @@
 
 | Clase/Método | Descripción |
 |-------------|-------------|
-| `BcvScraperService.obtenerTasa()` | Scraping de `bcv.org.ve`, parsea `#dolar` y `#euro` |
-| `BcvApiService.obtenerTasa()` | Consulta API `dolar-vzla.rafnixg.dev/api/v1/bcv/realtime` |
+| `BcvApiService.obtenerTasa()` | Consulta API realtime (USD y EUR) |
+| `BcvApiService.obtenerTasaHistorica(fecha)` | Consulta histórico: rango 7 días, tasa más reciente ≤ fecha |
+| `BcvScraperService.obtenerTasa()` | Scraping de `bcv.org.ve`, parsea `#dolar` y `#euro` (fallback) |
 | `BcvCacheService.obtenerTasa()` | Lee tasa cacheada de SharedPreferences |
 | `BcvCacheService.guardarTasa(tasa)` | Guarda tasa en SharedPreferences |
-| `TasaRepository.obtenerTasa()` | Orquestador: scraping → API → cache |
+| `TasaRepository.obtenerTasa()` | Orquestador: API → scraping → cache |
+| `TasaRepository.obtenerTasaHistorica(fecha)` | Histórico vía API |
 
 ## ViewModel
 
 | Clase/Método | Descripción |
 |-------------|-------------|
-| `ConversorViewmodel.cargarTasa()` | Obtiene tasa del repositorio |
+| `ConversorViewmodel.cargarTasa()` | Obtiene tasa (hoy o histórica según fecha) |
+| `ConversorViewmodel.setMoneda(moneda)` | Cambia moneda (USD/EUR), recalcula |
+| `ConversorViewmodel.seleccionarFecha(fecha)` | Fecha histórica, dispara carga |
+| `ConversorViewmodel.volverAHoy()` | Limpia fecha, carga tasa actual |
 | `ConversorViewmodel.setEntrada(valor)` | Actualiza entrada y dispara conversión |
-| `ConversorViewmodel.toggleDireccion()` | Alterna USD→VES / VES→USD y usa resultado como entrada |
-| `ConversorViewmodel.convertir()` | Convierte según dirección actual |
+| `ConversorViewmodel.toggleDireccion()` | Invierte dirección, usa resultado como entrada |
+| `ConversorViewmodel.convertir()` | Convierte según dirección y moneda |
 
 ## Enums
 
 | Enum | Valores | Descripción |
 |------|---------|-------------|
 | `EstadoTasa` | `cargando`, `listo`, `error` | Estado de carga de tasa |
-| `ConversionDireccion` | `dolarABolivar`, `bolivarADolar` | Dirección de conversión |
+| `ConversionDireccion` | `monedaAVes`, `vesAMoneda` | Dirección de conversión |
