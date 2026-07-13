@@ -1,12 +1,14 @@
 class TasaBcv {
   final double usd;
   final double eur;
+  final double usdt;
   final DateTime fecha;
   final String origen;
 
   const TasaBcv({
     required this.usd,
     required this.eur,
+    required this.usdt,
     required this.fecha,
     required this.origen,
   });
@@ -17,6 +19,8 @@ class TasaBcv {
         return usd;
       case 'EUR':
         return eur;
+      case 'USDT':
+        return usdt;
       default:
         throw ArgumentError('Moneda no soportada: $moneda');
     }
@@ -25,6 +29,7 @@ class TasaBcv {
   Map<String, dynamic> toJson() => {
         'usd': usd,
         'eur': eur,
+        'usdt': usdt,
         'fecha': fecha.toIso8601String(),
         'origen': origen,
       };
@@ -32,11 +37,8 @@ class TasaBcv {
   factory TasaBcv.fromJson(Map<String, dynamic> json) => TasaBcv(
         usd: (json['usd'] as num).toDouble(),
         eur: (json['eur'] as num).toDouble(),
+        usdt: (json['usdt'] as num).toDouble(),
         fecha: DateTime.parse(json['fecha'] as String),
         origen: json['origen'] as String,
       );
-
-  @override
-  String toString() =>
-      'TasaBcv(usd: $usd, eur: $eur, fecha: $fecha, origen: $origen)';
 }

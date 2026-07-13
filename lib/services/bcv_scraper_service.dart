@@ -27,6 +27,7 @@ class BcvScraperService {
     return TasaBcv(
       usd: usd,
       eur: eur,
+      usdt: 0,
       fecha: DateTime.now(),
       origen: 'scraping',
     );

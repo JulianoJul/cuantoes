@@ -1,19 +1,23 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/tasa_bcv.dart';
-import '../models/tasa_usdt.dart';
 
 class BcvApiService {
   static const _baseUrl = 'https://dolar-vzla.rafnixg.dev/api/v1';
 
   Future<TasaBcv> obtenerTasa() async {
-    final response = await http.get(Uri.parse('$_baseUrl/bcv/realtime'));
+    final results = await Future.wait([
+      http.get(Uri.parse('$_baseUrl/bcv/realtime')),
+      http.get(Uri.parse('$_baseUrl/binance/realtime_ves')),
+    ]);
 
-    if (response.statusCode != 200) {
-      throw Exception('Error en API: HTTP ${response.statusCode}');
+    final bcvResponse = results[0];
+    if (bcvResponse.statusCode != 200) {
+      throw Exception('Error en API BCV: HTTP ${bcvResponse.statusCode}');
     }
 
-    final List<dynamic> data = json.decode(response.body) as List<dynamic>;
+    final List<dynamic> data =
+        json.decode(bcvResponse.body) as List<dynamic>;
 
     double? usd;
     double? eur;
@@ -34,29 +38,18 @@ class BcvApiService {
       throw Exception('API no devolvió USD y EUR');
     }
 
+    double usdt = 0;
+    if (results[1].statusCode == 200) {
+      final usdtData = json.decode(results[1].body) as Map<String, dynamic>;
+      usdt = (usdtData['median_price'] as num?)?.toDouble() ?? 0;
+    }
+
     return TasaBcv(
       usd: usd,
       eur: eur,
+      usdt: usdt,
       fecha: fecha ?? DateTime.now(),
       origen: 'api',
-    );
-  }
-
-  Future<TasaUsdt> obtenerTasaUsdt() async {
-    final response = await http.get(Uri.parse('$_baseUrl/binance/realtime_ves'));
-
-    if (response.statusCode != 200) {
-      throw Exception('Error al obtener USDT: HTTP ${response.statusCode}');
-    }
-
-    final data = json.decode(response.body) as Map<String, dynamic>;
-    final average = (data['average_price'] as num).toDouble();
-    final median = (data['median_price'] as num).toDouble();
-
-    return TasaUsdt(
-      usdt: median,
-      promedio: average,
-      fecha: DateTime.now(),
     );
   }
 
@@ -111,6 +104,7 @@ class BcvApiService {
     return TasaBcv(
       usd: usd,
       eur: eur,
+      usdt: 0,
       fecha: fechaTasa,
       origen: 'api',
     );
