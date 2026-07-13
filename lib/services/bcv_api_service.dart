@@ -6,7 +6,9 @@ class BcvApiService {
   static const _baseUrl = 'https://dolar-vzla.rafnixg.dev/api/v1';
 
   Future<TasaBcv> obtenerTasa() async {
-    final response = await http.get(Uri.parse('$_baseUrl/bcv/realtime'));
+    final response = await http
+        .get(Uri.parse('$_baseUrl/bcv/realtime'))
+        .timeout(const Duration(seconds: 10));
 
     if (response.statusCode != 200) {
       throw Exception('Error en API BCV: HTTP ${response.statusCode}');
@@ -43,8 +45,9 @@ class BcvApiService {
   }
 
   Future<double> obtenerUsdt() async {
-    final response =
-        await http.get(Uri.parse('$_baseUrl/binance/realtime_ves'));
+    final response = await http
+        .get(Uri.parse('$_baseUrl/binance/realtime_ves'))
+        .timeout(const Duration(seconds: 10));
 
     if (response.statusCode != 200) {
       throw Exception('Error al obtener USDT: HTTP ${response.statusCode}');
@@ -62,10 +65,14 @@ class BcvApiService {
         '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}T00:00:00';
 
     final results = await Future.wait([
-      http.get(Uri.parse(
-          '$_baseUrl/history/bcv?currency=dolar&start_date=${formatDate(desde)}&end_date=${formatDate(hasta)}&limit=10')),
-      http.get(Uri.parse(
-          '$_baseUrl/history/bcv?currency=euro&start_date=${formatDate(desde)}&end_date=${formatDate(hasta)}&limit=10')),
+      http
+          .get(Uri.parse(
+              '$_baseUrl/history/bcv?currency=dolar&start_date=${formatDate(desde)}&end_date=${formatDate(hasta)}&limit=10'))
+          .timeout(const Duration(seconds: 10)),
+      http
+          .get(Uri.parse(
+              '$_baseUrl/history/bcv?currency=euro&start_date=${formatDate(desde)}&end_date=${formatDate(hasta)}&limit=10'))
+          .timeout(const Duration(seconds: 10)),
     ]);
 
     double? usd;

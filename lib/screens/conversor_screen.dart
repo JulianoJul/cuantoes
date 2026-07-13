@@ -130,15 +130,22 @@ class _ConversorBody extends StatelessWidget {
   }
 
   Widget _buildEntrada(ConversorViewmodel vm) {
-    return TextField(
-      controller: vm.entradaController,
-      onChanged: vm.setEntrada,
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      textAlign: TextAlign.center,
-      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w600),
-      decoration: InputDecoration(
-        labelText: vm.labelOrigen,
-        border: const OutlineInputBorder(),
+    return IgnorePointer(
+      ignoring: vm.entradaBloqueada,
+      child: Opacity(
+        opacity: vm.entradaBloqueada ? 0.5 : 1,
+        child: TextField(
+          controller: vm.entradaController,
+          onChanged: vm.setEntrada,
+          enabled: !vm.entradaBloqueada,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            labelText: vm.cargandoUsdt ? 'Cargando USDT...' : vm.labelOrigen,
+            border: const OutlineInputBorder(),
+          ),
+        ),
       ),
     );
   }
@@ -270,7 +277,7 @@ class _ConversorBody extends StatelessWidget {
 
   Widget _buildBotonRecargar(ConversorViewmodel vm) {
     return TextButton.icon(
-      onPressed: () => vm.cargarTasa(),
+      onPressed: () => vm.refrescarTasa(),
       icon: const Icon(Icons.refresh, size: 18),
       label: const Text('Actualizar tasa'),
     );

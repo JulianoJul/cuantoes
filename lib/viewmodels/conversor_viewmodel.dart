@@ -12,6 +12,7 @@ class ConversorViewmodel extends ChangeNotifier {
 
   TasaBcv? _tasa;
   EstadoTasa _estado = EstadoTasa.cargando;
+  bool _cargandoUsdt = false;
   String _error = '';
   ConversionDireccion _direccion = ConversionDireccion.monedaAVes;
   String _entrada = '';
@@ -29,6 +30,8 @@ class ConversorViewmodel extends ChangeNotifier {
   String get entrada => _entrada;
   String get resultado => _resultado;
   String get moneda => _moneda;
+  bool get cargandoUsdt => _cargandoUsdt;
+  bool get entradaBloqueada => _cargandoUsdt;
   DateTime? get fechaSeleccionada => _fechaSeleccionada;
 
   bool get esMonedaAVes => _direccion == ConversionDireccion.monedaAVes;
@@ -78,12 +81,35 @@ class ConversorViewmodel extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> refrescarTasa() async {
+    _estado = EstadoTasa.cargando;
+    _error = '';
+    notifyListeners();
+
+    try {
+      _tasa = await _repository.refrescarTasa();
+      _estado = EstadoTasa.listo;
+      if (_entrada.isNotEmpty) convertir();
+    } catch (e) {
+      _estado = EstadoTasa.error;
+      _error = e.toString();
+    }
+
+    notifyListeners();
+  }
+
   Future<void> setMoneda(String moneda) async {
     _moneda = moneda.toUpperCase();
     notifyListeners();
 
     if (_necesitaUsdt) {
+      _cargandoUsdt = true;
+      _resultado = '';
+      notifyListeners();
+
       final usdt = await _repository.obtenerUsdt();
+      _cargandoUsdt = false;
+
       if (usdt != null && usdt > 0) {
         if (_tasa != null) {
           _tasa = TasaBcv(
