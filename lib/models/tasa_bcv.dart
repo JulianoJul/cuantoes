@@ -35,10 +35,10 @@ class TasaBcv {
       };
 
   factory TasaBcv.fromJson(Map<String, dynamic> json) => TasaBcv(
-        usd: (json['usd'] as num).toDouble(),
-        eur: (json['eur'] as num).toDouble(),
-        usdt: (json['usdt'] as num).toDouble(),
+        usd: (json['usd'] as num?)?.toDouble() ?? 0,
+        eur: (json['eur'] as num?)?.toDouble() ?? 0,
+        usdt: (json['usdt'] as num?)?.toDouble() ?? 0,
         fecha: DateTime.parse(json['fecha'] as String),
-        origen: json['origen'] as String,
+        origen: json['origen'] as String? ?? '',
       );
 }
