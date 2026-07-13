@@ -125,7 +125,7 @@ class _ConversorBody extends StatelessWidget {
       context: context,
       initialDate: vm.fechaSeleccionada ?? DateTime.now(),
       firstDate: DateTime(2016, 1, 1),
-      lastDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
       locale: const Locale('es'),
     );
     if (picked != null) {
@@ -240,7 +240,7 @@ class _ConversorBody extends StatelessWidget {
               ],
               const SizedBox(height: 6),
               Text(
-                dateFormatter.format(t.fechaEfectiva),
+                dateFormatter.format(t.fecha),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.onPrimaryContainer
                           .withValues(alpha: 0.6),

@@ -26,13 +26,6 @@ class TasaBcv {
     }
   }
 
-  DateTime get fechaEfectiva {
-    if (fecha.hour >= 17) {
-      return DateTime(fecha.year, fecha.month, fecha.day + 1);
-    }
-    return DateTime(fecha.year, fecha.month, fecha.day);
-  }
-
   Map<String, dynamic> toJson() => {
         'usd': usd,
         'eur': eur,
