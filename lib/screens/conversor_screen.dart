@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../viewmodels/conversor_viewmodel.dart';
@@ -137,8 +138,17 @@ class _ConversorBody extends StatelessWidget {
         child: TextField(
           controller: vm.entradaController,
           onChanged: vm.setEntrada,
-          enabled: !vm.entradaBloqueada,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            TextInputFormatter.withFunction((oldValue, newValue) {
+              final text = newValue.text;
+              if (text.isEmpty) return newValue;
+              if (RegExp(r'^\d*([,.]\d{0,2})?$').hasMatch(text)) {
+                return newValue;
+              }
+              return oldValue;
+            }),
+          ],
           textAlign: TextAlign.center,
           style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w600),
           decoration: InputDecoration(

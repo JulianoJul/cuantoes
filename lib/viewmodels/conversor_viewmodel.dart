@@ -174,12 +174,11 @@ class ConversorViewmodel extends ChangeNotifier {
       return;
     }
 
-    final monto = double.tryParse(_entrada.replaceAll(',', '.'));
-    if (monto == null) {
-      _resultado = '';
-      notifyListeners();
-      return;
-    }
+    var valor = _entrada.replaceAll(',', '.');
+    valor = valor.replaceAll(RegExp(r'[.]$'), '');
+
+    final monto = double.tryParse(valor);
+    if (monto == null) return;
 
     double res;
     if (_direccion == ConversionDireccion.monedaAVes) {
