@@ -40,6 +40,9 @@ class ConversorViewmodel extends ChangeNotifier {
 
   double get tasaActual => _tasa?.de(_moneda) ?? 0;
 
+  bool get _necesitaUsdt =>
+      _moneda == 'USDT' && (_tasa == null || _tasa!.usdt == 0);
+
   String get labelOrigen =>
       esMonedaAVes ? _moneda : 'Bolívares (VES)';
   String get labelDestino =>
@@ -75,8 +78,37 @@ class ConversorViewmodel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setMoneda(String moneda) {
+  Future<void> setMoneda(String moneda) async {
     _moneda = moneda.toUpperCase();
+    notifyListeners();
+
+    if (_necesitaUsdt) {
+      final usdt = await _repository.obtenerUsdt();
+      if (usdt != null && usdt > 0) {
+        if (_tasa != null) {
+          _tasa = TasaBcv(
+            usd: _tasa!.usd,
+            eur: _tasa!.eur,
+            usdt: usdt,
+            fecha: _tasa!.fecha,
+            origen: _tasa!.origen,
+          );
+        } else {
+          _tasa = TasaBcv(
+            usd: 0,
+            eur: 0,
+            usdt: usdt,
+            fecha: DateTime.now(),
+            origen: 'api',
+          );
+          _estado = EstadoTasa.listo;
+        }
+        if (_entrada.isNotEmpty) convertir();
+      }
+      notifyListeners();
+      return;
+    }
+
     if (_tasa != null && _entrada.isNotEmpty) convertir();
     notifyListeners();
   }

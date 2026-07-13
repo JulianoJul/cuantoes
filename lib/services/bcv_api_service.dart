@@ -6,18 +6,13 @@ class BcvApiService {
   static const _baseUrl = 'https://dolar-vzla.rafnixg.dev/api/v1';
 
   Future<TasaBcv> obtenerTasa() async {
-    final results = await Future.wait([
-      http.get(Uri.parse('$_baseUrl/bcv/realtime')),
-      http.get(Uri.parse('$_baseUrl/binance/realtime_ves')),
-    ]);
+    final response = await http.get(Uri.parse('$_baseUrl/bcv/realtime'));
 
-    final bcvResponse = results[0];
-    if (bcvResponse.statusCode != 200) {
-      throw Exception('Error en API BCV: HTTP ${bcvResponse.statusCode}');
+    if (response.statusCode != 200) {
+      throw Exception('Error en API BCV: HTTP ${response.statusCode}');
     }
 
-    final List<dynamic> data =
-        json.decode(bcvResponse.body) as List<dynamic>;
+    final List<dynamic> data = json.decode(response.body) as List<dynamic>;
 
     double? usd;
     double? eur;
@@ -38,19 +33,25 @@ class BcvApiService {
       throw Exception('API no devolvió USD y EUR');
     }
 
-    double usdt = 0;
-    if (results[1].statusCode == 200) {
-      final usdtData = json.decode(results[1].body) as Map<String, dynamic>;
-      usdt = (usdtData['median_price'] as num?)?.toDouble() ?? 0;
-    }
-
     return TasaBcv(
       usd: usd,
       eur: eur,
-      usdt: usdt,
+      usdt: 0,
       fecha: fecha ?? DateTime.now(),
       origen: 'api',
     );
+  }
+
+  Future<double> obtenerUsdt() async {
+    final response =
+        await http.get(Uri.parse('$_baseUrl/binance/realtime_ves'));
+
+    if (response.statusCode != 200) {
+      throw Exception('Error al obtener USDT: HTTP ${response.statusCode}');
+    }
+
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    return (data['median_price'] as num?)?.toDouble() ?? 0;
   }
 
   Future<TasaBcv?> obtenerTasaHistorica(DateTime fecha) async {

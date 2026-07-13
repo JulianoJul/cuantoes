@@ -49,4 +49,12 @@ class TasaRepository {
       return null;
     }
   }
+
+  Future<double?> obtenerUsdt() async {
+    try {
+      return await _api.obtenerUsdt();
+    } catch (_) {
+      return null;
+    }
+  }
 }
