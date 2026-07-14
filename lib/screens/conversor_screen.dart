@@ -98,32 +98,14 @@ class _ConversorBody extends StatelessWidget {
     if (vm.moneda == 'USDT') return const SizedBox.shrink();
 
     final hoy = DateTime.now();
-    final manana = hoy.add(const Duration(days: 1));
 
     String label;
     if (vm.fechaSeleccionada != null) {
       final sel = vm.fechaSeleccionada!;
-      final esHoy =
-          sel.year == hoy.year && sel.month == hoy.month && sel.day == hoy.day;
-      final esManana = sel.year == manana.year &&
-          sel.month == manana.month &&
-          sel.day == manana.day;
-      if (esHoy) {
-        label = 'Hoy - ${formatter.format(sel)}';
-      } else if (esManana) {
-        label = 'Mañana - ${formatter.format(sel)}';
-      } else {
-        label = formatter.format(sel);
-      }
+      label = _formatearEtiqueta(sel, formatter);
     } else {
       final ef = vm.tasa?.fechaEfectiva ?? hoy;
-      if (ef.year == manana.year &&
-          ef.month == manana.month &&
-          ef.day == manana.day) {
-        label = 'Mañana - ${formatter.format(ef)}';
-      } else {
-        label = 'Hoy - ${formatter.format(ef)}';
-      }
+      label = _formatearEtiqueta(ef, formatter);
     }
 
     final mostrarVolver = vm.fechaSeleccionada != null &&
@@ -325,4 +307,23 @@ class _ConversorBody extends StatelessWidget {
       label: const Text('Actualizar tasa'),
     );
   }
+
+  String _formatearEtiqueta(DateTime fecha, DateFormat formatter) {
+    final hoy = DateTime.now();
+    final fechaStr = formatter.format(fecha);
+
+    if (_esMismaFecha(fecha, hoy)) return 'Hoy - $fechaStr';
+
+    final manana = hoy.add(const Duration(days: 1));
+    if (_esMismaFecha(fecha, manana)) return 'Mañana - $fechaStr';
+
+    const dias = [
+      'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'
+    ];
+    final nombre = dias[fecha.weekday - 1];
+    return '$nombre - $fechaStr';
+  }
+
+  bool _esMismaFecha(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 }
