@@ -97,14 +97,34 @@ class _ConversorBody extends StatelessWidget {
       BuildContext context, ConversorViewmodel vm, DateFormat formatter) {
     if (vm.moneda == 'USDT') return const SizedBox.shrink();
 
-    final label =
-        vm.esFechaHoy ? 'Hoy' : formatter.format(vm.fechaSeleccionada!);
-        vm.esFechaHoy ? 'Hoy' : formatter.format(vm.fechaSeleccionada!);
+    String label;
+    if (vm.fechaSeleccionada != null) {
+      label = formatter.format(vm.fechaSeleccionada!);
+    } else {
+      final ef = vm.tasa?.fechaEfectiva;
+      final hoy = DateTime.now();
+      final manana = hoy.add(const Duration(days: 1));
+
+      if (ef != null &&
+          ef.year == manana.year &&
+          ef.month == manana.month &&
+          ef.day == manana.day) {
+        label = 'Mañana';
+      } else {
+        label = 'Hoy';
+      }
+    }
+
+    final hoy = DateTime.now();
+    final esFechaDistintaAHoy = vm.fechaSeleccionada != null &&
+        (vm.fechaSeleccionada!.day != hoy.day ||
+            vm.fechaSeleccionada!.month != hoy.month ||
+            vm.fechaSeleccionada!.year != hoy.year);
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        if (!vm.esFechaHoy)
+        if (esFechaDistintaAHoy)
           IconButton(
             onPressed: () => vm.volverAHoy(),
             icon: const Icon(Icons.today, size: 20),
@@ -125,7 +145,7 @@ class _ConversorBody extends StatelessWidget {
       context: context,
       initialDate: vm.fechaSeleccionada ?? DateTime.now(),
       firstDate: DateTime(2016, 1, 1),
-      lastDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
       locale: const Locale('es'),
     );
     if (picked != null) {
