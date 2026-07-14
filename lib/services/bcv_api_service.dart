@@ -58,56 +58,47 @@ class BcvApiService {
   }
 
   Future<TasaBcv?> obtenerTasaHistorica(DateTime fecha) async {
-    final desde = fecha.subtract(const Duration(days: 7));
-    final hasta = fecha.add(const Duration(days: 1));
-
     String formatDate(DateTime d) =>
         '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}T00:00:00';
+
+    final inicio = formatDate(fecha);
+    final fin = formatDate(fecha.add(const Duration(days: 1)));
 
     final results = await Future.wait([
       http
           .get(Uri.parse(
-              '$_baseUrl/history/bcv?currency=dolar&start_date=${formatDate(desde)}&end_date=${formatDate(hasta)}&limit=10'))
+              '$_baseUrl/history/bcv?currency=dolar&start_date=$inicio&end_date=$fin&limit=1'))
           .timeout(const Duration(seconds: 10)),
       http
           .get(Uri.parse(
-              '$_baseUrl/history/bcv?currency=euro&start_date=${formatDate(desde)}&end_date=${formatDate(hasta)}&limit=10'))
+              '$_baseUrl/history/bcv?currency=euro&start_date=$inicio&end_date=$fin&limit=1'))
           .timeout(const Duration(seconds: 10)),
     ]);
 
     double? usd;
-    DateTime? fechaUsd;
     double? eur;
-    DateTime? fechaEur;
+    DateTime? fechaTasa;
 
     for (var i = 0; i < 2; i++) {
       if (results[i].statusCode != 200) continue;
       final body = json.decode(results[i].body) as Map<String, dynamic>;
       final currencies = body['currencies'] as List<dynamic>;
 
-      for (final c in currencies) {
-        final map = c as Map<String, dynamic>;
-        final rate = (map['rate'] as num).toDouble();
-        final date = DateTime.parse(map['date'] as String);
+      if (currencies.isEmpty) continue;
 
-        if (date.isAfter(fecha)) continue;
+      final c = currencies.first as Map<String, dynamic>;
+      final rate = (c['rate'] as num).toDouble();
+      final date = DateTime.parse(c['date'] as String);
 
-        if (i == 0 && (fechaUsd == null || date.isAfter(fechaUsd))) {
-          usd = rate;
-          fechaUsd = date;
-        }
-        if (i == 1 && (fechaEur == null || date.isAfter(fechaEur))) {
-          eur = rate;
-          fechaEur = date;
-        }
+      if (i == 0) {
+        usd = rate;
+        fechaTasa = date;
+      } else {
+        eur = rate;
       }
     }
 
-    if (usd == null || eur == null || fechaUsd == null || fechaEur == null) {
-      return null;
-    }
-
-    final fechaTasa = fechaUsd.isAfter(fechaEur) ? fechaUsd : fechaEur;
+    if (usd == null || eur == null || fechaTasa == null) return null;
 
     return TasaBcv(
       usd: usd,
