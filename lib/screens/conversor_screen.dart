@@ -261,12 +261,12 @@ class _ConversorBody extends StatelessWidget {
           ),
           child: Column(
             children: [
-              _rateLine(formatter, 'USD', t.usd),
+              _rateLine(formatter, vm, 'USD', t.usd),
               const SizedBox(height: 4),
-              _rateLine(formatter, 'EUR', t.eur),
+              _rateLine(formatter, vm, 'EUR', t.eur),
               if (t.usdt > 0) ...[
                 const SizedBox(height: 4),
-                _rateLine(formatter, 'USDT', t.usdt),
+                _rateLine(formatter, vm, 'USDT', t.usdt),
               ],
               const SizedBox(height: 6),
               Text(
@@ -282,7 +282,17 @@ class _ConversorBody extends StatelessWidget {
     }
   }
 
-  Widget _rateLine(NumberFormat formatter, String moneda, double valor) {
+  Widget _rateLine(
+      NumberFormat formatter, ConversorViewmodel vm, String moneda, double valor) {
+    String? variacionStr;
+    Color? variacionColor;
+    if (vm.variacion != null && vm.moneda == moneda) {
+      final v = vm.variacion!;
+      variacionStr =
+          '${v >= 0 ? "▲" : "▼"} ${v.toStringAsFixed(2)}%';
+      variacionColor = v >= 0 ? Colors.green : Colors.red;
+    }
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -291,6 +301,13 @@ class _ConversorBody extends StatelessWidget {
                 const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
         const SizedBox(width: 4),
         Text('1 = Bs. ${formatter.format(valor)}'),
+        if (variacionStr != null) ...[
+          const SizedBox(width: 8),
+          Text(
+            variacionStr,
+            style: TextStyle(fontSize: 11, color: variacionColor),
+          ),
+        ],
       ],
     );
   }

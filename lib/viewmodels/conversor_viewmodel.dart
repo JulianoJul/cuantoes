@@ -39,6 +39,7 @@ class ConversorViewmodel extends ChangeNotifier {
   bool get esMonedaAVes => _direccion == ConversionDireccion.monedaAVes;
 
   double get tasaActual => _tasa?.de(_moneda) ?? 0;
+  double? variacion;
 
   bool get _necesitaUsdt =>
       _moneda == 'USDT' && (_tasa == null || _tasa!.usdt == 0);
@@ -58,40 +59,54 @@ class ConversorViewmodel extends ChangeNotifier {
 
       if (_fechaSeleccionada != null) {
         tasa = await _repository.obtenerTasaHistorica(_fechaSeleccionada!);
-        if (tasa == null) {
-          final tasaViva = await _repository.obtenerTasa();
-          final sel = DateTime(
-            _fechaSeleccionada!.year,
-            _fechaSeleccionada!.month,
-            _fechaSeleccionada!.day,
-          );
-          final ef = DateTime(
-            tasaViva.fechaEfectiva.year,
-            tasaViva.fechaEfectiva.month,
-            tasaViva.fechaEfectiva.day,
-          );
-          if (sel == ef) {
-            tasa = tasaViva;
-          }
-        }
-      } else {
-        tasa = await _repository.obtenerTasa();
       }
+      tasa ??= await _repository.obtenerTasa();
 
-      if (tasa != null) {
-        _tasa = tasa;
-        _estado = EstadoTasa.listo;
-        if (_entrada.isNotEmpty) convertir();
-      } else {
-        _estado = EstadoTasa.error;
-        _error = 'Sin datos para esta fecha';
+      _tasa = tasa;
+      if (_fechaSeleccionada != null) {
+        final sel = DateTime(
+          _fechaSeleccionada!.year,
+          _fechaSeleccionada!.month,
+          _fechaSeleccionada!.day,
+        );
+        final ef = DateTime(
+          tasa.fechaEfectiva.year,
+          tasa.fechaEfectiva.month,
+          tasa.fechaEfectiva.day,
+        );
+        if (ef.isBefore(sel)) {
+          _fechaSeleccionada = ef;
+        }
       }
+      _estado = EstadoTasa.listo;
+      await _calcularVariacion();
+      if (_entrada.isNotEmpty) convertir();
     } catch (e) {
       _estado = EstadoTasa.error;
       _error = e.toString();
     }
 
     notifyListeners();
+  }
+
+  Future<void> _calcularVariacion() async {
+    if (_fechaSeleccionada != null || _tasa == null || _moneda == 'USDT') {
+      variacion = null;
+      return;
+    }
+    final ayer = DateTime.now().subtract(const Duration(days: 1));
+    final tasaAnterior = await _repository.obtenerTasaHistorica(ayer);
+    if (tasaAnterior == null) {
+      variacion = null;
+      return;
+    }
+    final actual = _tasa!.de(_moneda);
+    final anterior = tasaAnterior.de(_moneda);
+    if (anterior <= 0) {
+      variacion = null;
+      return;
+    }
+    variacion = ((actual - anterior) / anterior) * 100;
   }
 
   Future<void> refrescarTasa() async {
@@ -102,6 +117,7 @@ class ConversorViewmodel extends ChangeNotifier {
     try {
       _tasa = await _repository.refrescarTasa();
       _estado = EstadoTasa.listo;
+      await _calcularVariacion();
       if (_entrada.isNotEmpty) convertir();
     } catch (e) {
       _estado = EstadoTasa.error;
@@ -148,6 +164,7 @@ class ConversorViewmodel extends ChangeNotifier {
           );
           _estado = EstadoTasa.listo;
         }
+        await _calcularVariacion();
         if (_entrada.isNotEmpty) convertir();
       }
       notifyListeners();
@@ -155,6 +172,7 @@ class ConversorViewmodel extends ChangeNotifier {
     }
 
     _cargandoUsdt = false;
+    await _calcularVariacion();
     if (_tasa != null && _entrada.isNotEmpty) convertir();
     notifyListeners();
   }
@@ -180,8 +198,8 @@ class ConversorViewmodel extends ChangeNotifier {
         : ConversionDireccion.monedaAVes;
 
     if (_tasa != null && _resultado.isNotEmpty) {
-      _entrada = _resultadoPreciso;
-      entradaController.text = _resultadoPreciso;
+      _entrada = _resultado;
+      entradaController.text = _resultado;
       convertir();
     }
     notifyListeners();
