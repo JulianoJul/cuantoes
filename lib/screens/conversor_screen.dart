@@ -97,14 +97,26 @@ class _ConversorBody extends StatelessWidget {
       BuildContext context, ConversorViewmodel vm, DateFormat formatter) {
     if (vm.moneda == 'USDT') return const SizedBox.shrink();
 
+    final hoy = DateTime.now();
+    final manana = hoy.add(const Duration(days: 1));
+
     String label;
     if (vm.fechaSeleccionada != null) {
-      label = formatter.format(vm.fechaSeleccionada!);
+      final sel = vm.fechaSeleccionada!;
+      final esHoy =
+          sel.year == hoy.year && sel.month == hoy.month && sel.day == hoy.day;
+      final esManana = sel.year == manana.year &&
+          sel.month == manana.month &&
+          sel.day == manana.day;
+      if (esHoy) {
+        label = 'Hoy - ${formatter.format(sel)}';
+      } else if (esManana) {
+        label = 'Mañana - ${formatter.format(sel)}';
+      } else {
+        label = formatter.format(sel);
+      }
     } else {
       final ef = vm.tasa?.fechaEfectiva;
-      final hoy = DateTime.now();
-      final manana = hoy.add(const Duration(days: 1));
-
       if (ef != null &&
           ef.year == manana.year &&
           ef.month == manana.month &&
@@ -115,7 +127,6 @@ class _ConversorBody extends StatelessWidget {
       }
     }
 
-    final hoy = DateTime.now();
     final esFechaDistintaAHoy = vm.fechaSeleccionada != null &&
         (vm.fechaSeleccionada!.day != hoy.day ||
             vm.fechaSeleccionada!.month != hoy.month ||
