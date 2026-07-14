@@ -131,10 +131,16 @@ class _ConversorBody extends StatelessWidget {
             vm.fechaSeleccionada!.month != hoy.month ||
             vm.fechaSeleccionada!.year != hoy.year);
 
+    final volverEsInutil = vm.fechaSeleccionada != null &&
+        vm.tasa?.fechaEfectiva != null &&
+        vm.fechaSeleccionada!.year == vm.tasa!.fechaEfectiva.year &&
+        vm.fechaSeleccionada!.month == vm.tasa!.fechaEfectiva.month &&
+        vm.fechaSeleccionada!.day == vm.tasa!.fechaEfectiva.day;
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        if (esFechaDistintaAHoy)
+        if (esFechaDistintaAHoy && !volverEsInutil)
           IconButton(
             onPressed: () => vm.volverAHoy(),
             icon: const Icon(Icons.today, size: 20),
