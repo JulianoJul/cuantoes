@@ -59,8 +59,24 @@ class ConversorViewmodel extends ChangeNotifier {
           _tasa = historica;
           _estado = EstadoTasa.listo;
         } else {
-          _estado = EstadoTasa.error;
-          _error = 'Sin datos para esta fecha';
+          final tasaViva = await _repository.obtenerTasa();
+          final sel = DateTime(
+            _fechaSeleccionada!.year,
+            _fechaSeleccionada!.month,
+            _fechaSeleccionada!.day,
+          );
+          final ef = DateTime(
+            tasaViva.fechaEfectiva.year,
+            tasaViva.fechaEfectiva.month,
+            tasaViva.fechaEfectiva.day,
+          );
+          if (sel == ef) {
+            _tasa = tasaViva;
+            _estado = EstadoTasa.listo;
+          } else {
+            _estado = EstadoTasa.error;
+            _error = 'Sin datos para esta fecha';
+          }
         }
       } else {
         _tasa = await _repository.obtenerTasa();
