@@ -126,21 +126,13 @@ class _ConversorBody extends StatelessWidget {
       }
     }
 
-    final esFechaDistintaAHoy = vm.fechaSeleccionada != null &&
-        (vm.fechaSeleccionada!.day != hoy.day ||
-            vm.fechaSeleccionada!.month != hoy.month ||
-            vm.fechaSeleccionada!.year != hoy.year);
-
-    final volverEsInutil = vm.fechaSeleccionada != null &&
-        vm.tasa?.fechaEfectiva != null &&
-        vm.fechaSeleccionada!.year == vm.tasa!.fechaEfectiva.year &&
-        vm.fechaSeleccionada!.month == vm.tasa!.fechaEfectiva.month &&
-        vm.fechaSeleccionada!.day == vm.tasa!.fechaEfectiva.day;
+    final mostrarVolver = vm.fechaSeleccionada != null &&
+        vm.fechaSeleccionada!.isBefore(DateTime(hoy.year, hoy.month, hoy.day));
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        if (esFechaDistintaAHoy && !volverEsInutil)
+        if (mostrarVolver)
           IconButton(
             onPressed: () => vm.volverAHoy(),
             icon: const Icon(Icons.today, size: 20),
