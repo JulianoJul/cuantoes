@@ -116,14 +116,13 @@ class _ConversorBody extends StatelessWidget {
         label = formatter.format(sel);
       }
     } else {
-      final ef = vm.tasa?.fechaEfectiva;
-      if (ef != null &&
-          ef.year == manana.year &&
+      final ef = vm.tasa?.fechaEfectiva ?? hoy;
+      if (ef.year == manana.year &&
           ef.month == manana.month &&
           ef.day == manana.day) {
-        label = 'Mañana';
+        label = 'Mañana - ${formatter.format(ef)}';
       } else {
-        label = 'Hoy';
+        label = 'Hoy - ${formatter.format(ef)}';
       }
     }
 
