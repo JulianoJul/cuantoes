@@ -58,20 +58,22 @@ class BcvApiService {
   }
 
   Future<TasaBcv?> obtenerTasaHistorica(DateTime fecha) async {
+    final fechaLimite = DateTime(fecha.year, fecha.month, fecha.day);
+
     String formatDate(DateTime d) =>
         '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}T00:00:00';
 
-    final inicio = formatDate(fecha);
-    final fin = formatDate(fecha.add(const Duration(days: 1)));
+    final inicio = formatDate(fecha.subtract(const Duration(days: 7)));
+    final fin = formatDate(fecha.add(const Duration(days: 3)));
 
     final results = await Future.wait([
       http
           .get(Uri.parse(
-              '$_baseUrl/history/bcv?currency=dolar&start_date=$inicio&end_date=$fin&limit=1'))
+              '$_baseUrl/history/bcv?currency=dolar&start_date=$inicio&end_date=$fin&limit=10&order=desc'))
           .timeout(const Duration(seconds: 10)),
       http
           .get(Uri.parse(
-              '$_baseUrl/history/bcv?currency=euro&start_date=$inicio&end_date=$fin&limit=1'))
+              '$_baseUrl/history/bcv?currency=euro&start_date=$inicio&end_date=$fin&limit=10&order=desc'))
           .timeout(const Duration(seconds: 10)),
     ]);
 
@@ -79,26 +81,40 @@ class BcvApiService {
     double? eur;
     DateTime? fechaTasa;
 
-    for (var i = 0; i < 2; i++) {
-      if (results[i].statusCode != 200) continue;
-      final body = json.decode(results[i].body) as Map<String, dynamic>;
-      final currencies = body['currencies'] as List<dynamic>;
-
-      if (currencies.isEmpty) continue;
-
-      final c = currencies.first as Map<String, dynamic>;
-      final rate = (c['rate'] as num).toDouble();
-      final date = DateTime.parse(c['date'] as String);
-
-      if (i == 0) {
-        usd = rate;
-        fechaTasa = date;
-      } else {
-        eur = rate;
-      }
+    List<Map<String, dynamic>> extraerRates(http.Response response) {
+      if (response.statusCode != 200) return [];
+      final body = json.decode(response.body) as Map<String, dynamic>;
+      final currencies = body['currencies'] as List<dynamic>? ?? [];
+      return currencies.cast<Map<String, dynamic>>();
     }
 
-    if (usd == null || eur == null || fechaTasa == null) return null;
+    final dolarRates = extraerRates(results[0]);
+    final euroRates = extraerRates(results[1]);
+
+    if (dolarRates.isEmpty || euroRates.isEmpty) return null;
+
+    Map<String, dynamic>? mejorTasaPorFecha(
+        List<Map<String, dynamic>> rates) {
+      for (final c in rates) {
+        final date = DateTime.parse(c['date'] as String);
+        final ef = TasaBcv(
+          usd: 0, eur: 0, usdt: 0,
+          fecha: date, origen: 'api',
+        ).fechaEfectiva;
+        if (!ef.isAfter(fechaLimite)) {
+          return c;
+        }
+      }
+      return null;
+    }
+
+    final mejorUsd = mejorTasaPorFecha(dolarRates);
+    final mejorEur = mejorTasaPorFecha(euroRates);
+    if (mejorUsd == null || mejorEur == null) return null;
+
+    usd = (mejorUsd['rate'] as num).toDouble();
+    eur = (mejorEur['rate'] as num).toDouble();
+    fechaTasa = DateTime.parse(mejorUsd['date'] as String);
 
     return TasaBcv(
       usd: usd,

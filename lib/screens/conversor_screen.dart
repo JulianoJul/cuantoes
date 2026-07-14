@@ -190,20 +190,38 @@ class _ConversorBody extends StatelessWidget {
       );
     }
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          vm.esMonedaAVes ? 'Bs. ' : '${vm.moneda} ',
-          style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              vm.esMonedaAVes ? 'Bs. ' : '${vm.moneda} ',
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+            ),
+            Flexible(
+              child: Text(
+                formatter.format(
+                    double.parse(vm.resultado.replaceAll(',', '.'))),
+                style: const TextStyle(
+                    fontSize: 28, fontWeight: FontWeight.w600),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
         ),
-        Flexible(
-          child: Text(
-            formatter.format(double.parse(vm.resultado.replaceAll(',', '.'))),
-            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w600),
-            textAlign: TextAlign.center,
+        if (!vm.esMonedaAVes && vm.resultadoPreciso.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Opacity(
+              opacity: 0.45,
+              child: Text(
+                'Cálculo preciso: ${vm.resultadoPreciso.replaceAll('.', ',')} ${vm.moneda}',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
           ),
-        ),
       ],
     );
   }

@@ -10,6 +10,7 @@
 | Cache | shared_preferences |
 | Formato | intl |
 | Localización | flutter_localizations (es) |
+| Scraping Python | selenium + Firefox headless (alternativa) |
 
 ## Arquitectura
 
@@ -17,28 +18,44 @@
 lib/
 ├── main.dart                        # CuantoesApp, MaterialApp, locale es
 ├── models/
-│   └── tasa_bcv.dart                # TasaBcv (USD, EUR, fecha, origen)
+│   └── tasa_bcv.dart                # TasaBcv (USD, EUR, USDT, fecha, origen)
+├── utils/
+│   └── feriados_ve.dart             # Feriados bancarios VE (fijos + Pascua)
 ├── services/
-│   ├── bcv_api_service.dart         # API: realtime + histórico
+│   ├── bcv_api_service.dart         # API: realtime + histórico + USDT
 │   ├── bcv_scraper_service.dart     # Scraping bcv.org.ve (fallback)
 │   ├── bcv_cache_service.dart       # SharedPreferences
-│   └── tasa_repository.dart         # API → scraping → cache
+│   └── tasa_repository.dart         # cache → API → cache → scraper
 ├── viewmodels/
 │   └── conversor_viewmodel.dart     # ChangeNotifier, moneda, fecha, conversión
 └── screens/
-    └── conversor_screen.dart        # UI: tabs USD/EUR, calendario, conversor
+    └── conversor_screen.dart        # UI: tabs USD/EUR/USDT, calendario, conversor
 ```
 
 ## Flujo de datos
 
+### Tasa actual
 ```
-Usuario → ConversorViewmodel → TasaRepository
-                                    ├── BcvApiService (principal)
-                                    │   ├── obtenerTasa() → /bcv/realtime
-                                    │   └── obtenerTasaHistorica(fecha) → /history/bcv
-                                    ├── BcvScraperService (fallback)
-                                    └── BcvCacheService (último recurso)
+Usuario → ConversorViewmodel.cargarTasa() → TasaRepository.obtenerTasa()
+                                                ├── cache vigente? → retorna
+                                                └── refrescarTasa()
+                                                    ├── API → guarda cache → retorna
+                                                    ├── cache → retorna
+                                                    └── scraper → guarda cache → retorna
+                                                        └── rethrow
 ```
+
+### Tasa histórica
+```
+Usuario → ConversorViewmodel.seleccionarFecha() → TasaRepository.obtenerTasaHistorica()
+                                                    ├── cache por fecha? → retorna
+                                                    └── API (rango 7d, filter fechaEfectiva) → guarda cache
+```
+
+## Scraper Python
+`scrap_bcv.py` usa Selenium + Firefox headless para extraer tasas cuando el BCV bloquea HTTP.
+Output: JSON con `usd`, `eur`, `fecha_efectiva`, `fecha_valor_bcv`.
+Requiere: `pip install selenium`, Firefox, geckodriver.
 
 ## Comandos
 

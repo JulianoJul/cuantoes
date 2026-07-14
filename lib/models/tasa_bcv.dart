@@ -1,3 +1,5 @@
+import '../utils/feriados_ve.dart';
+
 class TasaBcv {
   final double usd;
   final double eur;
@@ -27,10 +29,11 @@ class TasaBcv {
   }
 
   DateTime get fechaEfectiva {
+    var ef = DateTime(fecha.year, fecha.month, fecha.day);
     if (fecha.hour >= 14) {
-      return DateTime(fecha.year, fecha.month, fecha.day + 1);
+      ef = ef.add(const Duration(days: 1));
     }
-    return DateTime(fecha.year, fecha.month, fecha.day);
+    return proximoDiaHabil(ef);
   }
 
   Map<String, dynamic> toJson() => {

@@ -1,15 +1,19 @@
 import '../models/tasa_bcv.dart';
 import 'bcv_api_service.dart';
 import 'bcv_cache_service.dart';
+import 'bcv_scraper_service.dart';
 
 class TasaRepository {
   final BcvApiService _api;
+  final BcvScraperService _scraper;
   final BcvCacheService _cache;
 
   TasaRepository({
     BcvApiService? api,
+    BcvScraperService? scraper,
     BcvCacheService? cache,
   })  : _api = api ?? BcvApiService(),
+        _scraper = scraper ?? BcvScraperService(),
         _cache = cache ?? BcvCacheService();
 
   Future<TasaBcv> obtenerTasa() async {
@@ -29,13 +33,27 @@ class TasaRepository {
     } catch (_) {
       final cache = await _cache.obtenerTasa();
       if (cache != null) return cache;
+      final scrape = await _scraper.obtenerTasa();
+      if (scrape != null) {
+        await _cache.guardarTasa(scrape);
+        return scrape;
+      }
       rethrow;
     }
   }
 
   Future<TasaBcv?> obtenerTasaHistorica(DateTime fecha) async {
+    final ef = DateTime(fecha.year, fecha.month, fecha.day);
+
+    final cache = await _cache.obtenerTasaPorFecha(ef);
+    if (cache != null) return cache;
+
     try {
-      return await _api.obtenerTasaHistorica(fecha);
+      final tasa = await _api.obtenerTasaHistorica(fecha);
+      if (tasa != null) {
+        await _cache.guardarTasa(tasa);
+      }
+      return tasa;
     } catch (_) {
       return null;
     }

@@ -17,6 +17,7 @@ class ConversorViewmodel extends ChangeNotifier {
   ConversionDireccion _direccion = ConversionDireccion.monedaAVes;
   String _entrada = '';
   String _resultado = '';
+  String _resultadoPreciso = '';
   String _moneda = 'USD';
   DateTime? _fechaSeleccionada;
 
@@ -29,6 +30,7 @@ class ConversorViewmodel extends ChangeNotifier {
   ConversionDireccion get direccion => _direccion;
   String get entrada => _entrada;
   String get resultado => _resultado;
+  String get resultadoPreciso => _resultadoPreciso;
   String get moneda => _moneda;
   bool get cargandoUsdt => _cargandoUsdt;
   bool get entradaBloqueada => _cargandoUsdt;
@@ -52,13 +54,11 @@ class ConversorViewmodel extends ChangeNotifier {
     notifyListeners();
 
     try {
+      TasaBcv? tasa;
+
       if (_fechaSeleccionada != null) {
-        final historica =
-            await _repository.obtenerTasaHistorica(_fechaSeleccionada!);
-        if (historica != null) {
-          _tasa = historica;
-          _estado = EstadoTasa.listo;
-        } else {
+        tasa = await _repository.obtenerTasaHistorica(_fechaSeleccionada!);
+        if (tasa == null) {
           final tasaViva = await _repository.obtenerTasa();
           final sel = DateTime(
             _fechaSeleccionada!.year,
@@ -71,19 +71,21 @@ class ConversorViewmodel extends ChangeNotifier {
             tasaViva.fechaEfectiva.day,
           );
           if (sel == ef) {
-            _tasa = tasaViva;
-            _estado = EstadoTasa.listo;
-          } else {
-            _estado = EstadoTasa.error;
-            _error = 'Sin datos para esta fecha';
+            tasa = tasaViva;
           }
         }
       } else {
-        _tasa = await _repository.obtenerTasa();
-        _estado = EstadoTasa.listo;
+        tasa = await _repository.obtenerTasa();
       }
 
-      if (_entrada.isNotEmpty) convertir();
+      if (tasa != null) {
+        _tasa = tasa;
+        _estado = EstadoTasa.listo;
+        if (_entrada.isNotEmpty) convertir();
+      } else {
+        _estado = EstadoTasa.error;
+        _error = 'Sin datos para esta fecha';
+      }
     } catch (e) {
       _estado = EstadoTasa.error;
       _error = e.toString();
@@ -116,9 +118,15 @@ class ConversorViewmodel extends ChangeNotifier {
     if (_necesitaUsdt) {
       _cargandoUsdt = true;
       _resultado = '';
+      _resultadoPreciso = '';
       notifyListeners();
 
       final usdt = await _repository.obtenerUsdt();
+      if (_moneda != 'USDT') {
+        _cargandoUsdt = false;
+        notifyListeners();
+        return;
+      }
       _cargandoUsdt = false;
 
       if (usdt != null && usdt > 0) {
@@ -146,6 +154,7 @@ class ConversorViewmodel extends ChangeNotifier {
       return;
     }
 
+    _cargandoUsdt = false;
     if (_tasa != null && _entrada.isNotEmpty) convertir();
     notifyListeners();
   }
@@ -171,8 +180,8 @@ class ConversorViewmodel extends ChangeNotifier {
         : ConversionDireccion.monedaAVes;
 
     if (_tasa != null && _resultado.isNotEmpty) {
-      _entrada = _resultado;
-      entradaController.text = _resultado;
+      _entrada = _resultadoPreciso;
+      entradaController.text = _resultadoPreciso;
       convertir();
     }
     notifyListeners();
@@ -181,6 +190,7 @@ class ConversorViewmodel extends ChangeNotifier {
   void convertir() {
     if (_tasa == null || _entrada.isEmpty) {
       _resultado = '';
+      _resultadoPreciso = '';
       notifyListeners();
       return;
     }
@@ -199,6 +209,7 @@ class ConversorViewmodel extends ChangeNotifier {
     }
 
     _resultado = res.toStringAsFixed(2);
+    _resultadoPreciso = res.toStringAsFixed(4);
     notifyListeners();
   }
 

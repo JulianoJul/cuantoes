@@ -1,0 +1,61 @@
+Set<int> _feriadosFijos = {1, 19, 24, 5, 25};
+
+int _feriadoMes(int dia) {
+  const meses = <int, int>{
+    1: 1,
+    19: 4,
+    24: 6,
+    5: 7,
+    25: 12,
+  };
+  return meses[dia] ?? 0;
+}
+
+DateTime _calcularPascua(int year) {
+  final a = year % 19;
+  final b = year ~/ 100;
+  final c = year % 100;
+  final d = b ~/ 4;
+  final e = b % 4;
+  final f = (b + 8) ~/ 25;
+  final g = (b - f + 1) ~/ 3;
+  final h = (19 * a + b - d - g + 15) % 30;
+  final i = c ~/ 4;
+  final k = c % 4;
+  final l = (32 + 2 * e + 2 * i - h - k) % 7;
+  final m = (a + 11 * h + 22 * l) ~/ 451;
+  final mes = (h + l - 7 * m + 114) ~/ 31;
+  final dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return DateTime(year, mes, dia);
+}
+
+DateTime _sumarDias(DateTime dt, int days) => dt.add(Duration(days: days));
+
+bool esFeriadoBancario(DateTime fecha) {
+  final d = fecha.day;
+  final m = fecha.month;
+
+  if (_feriadosFijos.contains(d) && _feriadoMes(d) == m) return true;
+
+  final pascua = _calcularPascua(fecha.year);
+
+  final carnavalLunes = _sumarDias(pascua, -48);
+  final carnavalMartes = _sumarDias(pascua, -47);
+  final juevesSanto = _sumarDias(pascua, -3);
+  final viernesSanto = _sumarDias(pascua, -2);
+
+  return fecha == carnavalLunes ||
+      fecha == carnavalMartes ||
+      fecha == juevesSanto ||
+      fecha == viernesSanto;
+}
+
+DateTime proximoDiaHabil(DateTime fecha) {
+  var ef = DateTime(fecha.year, fecha.month, fecha.day);
+  while (ef.weekday == DateTime.saturday ||
+      ef.weekday == DateTime.sunday ||
+      esFeriadoBancario(ef)) {
+    ef = ef.add(const Duration(days: 1));
+  }
+  return ef;
+}
