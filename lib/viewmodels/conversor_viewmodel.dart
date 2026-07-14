@@ -35,11 +35,6 @@ class ConversorViewmodel extends ChangeNotifier {
   DateTime? get fechaSeleccionada => _fechaSeleccionada;
 
   bool get esMonedaAVes => _direccion == ConversionDireccion.monedaAVes;
-  bool get esFechaHoy =>
-      _fechaSeleccionada == null ||
-      _fechaSeleccionada!.day == DateTime.now().day &&
-          _fechaSeleccionada!.month == DateTime.now().month &&
-          _fechaSeleccionada!.year == DateTime.now().year;
 
   double get tasaActual => _tasa?.de(_moneda) ?? 0;
 
@@ -57,7 +52,7 @@ class ConversorViewmodel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      if (_fechaSeleccionada != null && !esFechaHoy) {
+      if (_fechaSeleccionada != null) {
         final historica =
             await _repository.obtenerTasaHistorica(_fechaSeleccionada!);
         if (historica != null) {

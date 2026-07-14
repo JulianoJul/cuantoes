@@ -143,9 +143,11 @@ class _ConversorBody extends StatelessWidget {
       BuildContext context, ConversorViewmodel vm) async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: vm.fechaSeleccionada ?? DateTime.now(),
+      initialDate: vm.fechaSeleccionada ?? vm.tasa?.fechaEfectiva ?? DateTime.now(),
       firstDate: DateTime(2016, 1, 1),
       lastDate: DateTime.now().add(const Duration(days: 1)),
+      selectableDayPredicate: (day) =>
+          day.weekday != DateTime.saturday && day.weekday != DateTime.sunday,
       locale: const Locale('es'),
     );
     if (picked != null) {
