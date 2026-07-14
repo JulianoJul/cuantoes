@@ -9,6 +9,7 @@ enum EstadoTasa { cargando, listo, error }
 class ConversorViewmodel extends ChangeNotifier {
   final TasaRepository _repository;
   final entradaController = TextEditingController();
+  int _cargaGeneracion = 0;
 
   TasaBcv? _tasa;
   EstadoTasa _estado = EstadoTasa.cargando;
@@ -54,13 +55,17 @@ class ConversorViewmodel extends ChangeNotifier {
     _error = '';
     notifyListeners();
 
+    final generacion = ++_cargaGeneracion;
+
     try {
       TasaBcv? tasa;
 
       if (_fechaSeleccionada != null) {
         tasa = await _repository.obtenerTasaHistorica(_fechaSeleccionada!);
+        if (_cargaGeneracion != generacion) return;
       }
       tasa ??= await _repository.obtenerTasa();
+      if (_cargaGeneracion != generacion) return;
 
       _tasa = tasa;
       if (_fechaSeleccionada != null) {
@@ -80,8 +85,10 @@ class ConversorViewmodel extends ChangeNotifier {
       }
       _estado = EstadoTasa.listo;
       await _calcularVariacion();
+      if (_cargaGeneracion != generacion) return;
       if (_entrada.isNotEmpty) convertir();
     } catch (e) {
+      if (_cargaGeneracion != generacion) return;
       _estado = EstadoTasa.error;
       _error = e.toString();
     }
@@ -94,8 +101,10 @@ class ConversorViewmodel extends ChangeNotifier {
       variacion = null;
       return;
     }
+    final gen = _cargaGeneracion;
     final ayer = DateTime.now().subtract(const Duration(days: 1));
     final tasaAnterior = await _repository.obtenerTasaHistorica(ayer);
+    if (_cargaGeneracion != gen) return;
     if (tasaAnterior == null) {
       variacion = null;
       return;
@@ -132,12 +141,14 @@ class ConversorViewmodel extends ChangeNotifier {
     notifyListeners();
 
     if (_necesitaUsdt) {
+      final gen = ++_cargaGeneracion;
       _cargandoUsdt = true;
       _resultado = '';
       _resultadoPreciso = '';
       notifyListeners();
 
       final usdt = await _repository.obtenerUsdt();
+      if (_cargaGeneracion != gen) return;
       if (_moneda != 'USDT') {
         _cargandoUsdt = false;
         notifyListeners();
@@ -165,6 +176,7 @@ class ConversorViewmodel extends ChangeNotifier {
           _estado = EstadoTasa.listo;
         }
         await _calcularVariacion();
+        if (_cargaGeneracion != gen) return;
         if (_entrada.isNotEmpty) convertir();
       }
       notifyListeners();
