@@ -47,10 +47,18 @@ Usuario → ConversorViewmodel.cargarTasa() → TasaRepository.obtenerTasa()
 
 ### Tasa histórica
 ```
-Usuario → ConversorViewmodel.seleccionarFecha() → TasaRepository.obtenerTasaHistorica()
-                                                    ├── cache por fecha? → retorna
-                                                    └── API (rango 7d, filter fechaEfectiva) → guarda cache
+Usuario → ConversorViewmodel.seleccionarFecha()
+            ├── TasaRepository.obtenerTasaHistorica()
+            │       ├── cache por fecha? → retorna
+            │       └── API (rango 7d, filter fechaEfectiva) → guarda cache
+            └── si no hay datos → TasaRepository.obtenerTasa() (tasa viva)
+                └── _fechaSeleccionada se actualiza a la fechaEfectiva real
 ```
+
+### Variación porcentual
+- `ConversorViewmodel._calcularVariacion()`: compara tasa actual vs día anterior
+- Solo visible para tasa actual (sin fecha seleccionada), no para USDT
+- Se muestra en la UI como "▲ +0.61%" / "▼ -0.20%" junto a la tasa correspondiente
 
 ## Scraper Python
 `scrap_bcv.py` usa Selenium + Firefox headless para extraer tasas cuando el BCV bloquea HTTP.

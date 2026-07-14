@@ -71,3 +71,28 @@
   - Output JSON compatible con el modelo Dart
   - No integrado en el pipeline de Flutter; se ejecuta manualmente o vía script externo
 - **Impacto:** Archivo `scrap_bcv.py` en raíz. Documentado en docs como alternativa.
+
+---
+
+## DEC-007: Fallback a fecha anterior en selector histórico
+
+- **Origen:** `[Solicitud del usuario tras probar la app]`
+- **Contexto y Causa:** El usuario seleccionaba una fecha (ej: 14/07) y la API/cache no tenían datos para ese día exacto, mostrando error. El usuario pedía que el calendario muestre automáticamente la fecha anterior con datos disponibles.
+- **Decisión:**
+  - `cargarTasa()` con `_fechaSeleccionada`: primero intenta `obtenerTasaHistorica`; si falla (null), hace fallback a `obtenerTasa()` (tasa viva) sin requerir match exacto de fecha
+  - Si la `fechaEfectiva` de la tasa obtenida es anterior a la seleccionada por el usuario, `_fechaSeleccionada` se actualiza a esa fecha, reflejando en el calendario los datos reales
+  - No se actualiza si la fecha efectiva es igual o posterior (evita mostrar "Mañana" cuando el usuario seleccionó "Hoy")
+- **Impacto:** Simplifica `cargarTasa()` eliminando la comparación `sel == ef`. El selector de fecha siempre muestra la fecha de los datos que se están visualizando.
+
+---
+
+## DEC-008: Variación porcentual respecto al día anterior
+
+- **Origen:** `[Solicitud del usuario]`
+- **Contexto y Causa:** No había indicación visual de si la tasa subió o bajó respecto al día anterior.
+- **Decisión:**
+  - `ConversorViewmodel.variacion` (`double?`): se calcula al cargar/refrescar tasa actual
+  - `_calcularVariacion()`: obtiene tasa del día anterior vía `obtenerTasaHistorica(hoy-1)`, calcula `((actual - anterior) / anterior) * 100`
+  - Solo se calcula para tasa actual (sin fecha seleccionada), no para USDT
+  - No bloquea la UI si falla (variación queda null)
+- **Impacto:** Nueva propiedad `variacion` en ViewModel. UI muestra ▲/▼ + porcentaje en la línea de tasa correspondiente.

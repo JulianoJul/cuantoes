@@ -261,6 +261,10 @@ descripción del problema y solución propuesta. Marcados con `[ ]` pendiente, `
 
 ## Estado global
 
-- Total de issues: **18** (8 bugs + 7 docs + 3 code + 4 mejoras)
-- Completados: **17** (B1-B7 + C1-C3 + D1-D7)
-- Pendientes: **1** (B8: tests)
+- Total de issues: **20** (8 bugs + 7 docs + 3 code + 4 mejoras + 2 nuevas features)
+- Completados: **20**
+- Pendientes: **0**
+
+### Features adicionales implementadas
+- **F1**: Fallback automático a fecha anterior en selector histórico (DEC-007)
+- **F2**: Variación porcentual vs día anterior (DEC-008)
