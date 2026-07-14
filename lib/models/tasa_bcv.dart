@@ -27,7 +27,7 @@ class TasaBcv {
   }
 
   DateTime get fechaEfectiva {
-    if (fecha.hour >= 17) {
+    if (fecha.hour >= 14) {
       return DateTime(fecha.year, fecha.month, fecha.day + 1);
     }
     return DateTime(fecha.year, fecha.month, fecha.day);

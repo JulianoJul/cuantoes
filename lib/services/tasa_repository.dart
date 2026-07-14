@@ -56,6 +56,6 @@ class TasaRepository {
     if (fechaEfectiva.isBefore(hoy)) return false;
     if (fechaEfectiva.isAfter(hoy)) return true;
 
-    return ahora.hour < 17;
+    return ahora.hour < 14;
   }
 }
