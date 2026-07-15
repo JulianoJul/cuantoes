@@ -57,6 +57,74 @@ class BcvApiService {
     return (data['median_price'] as num?)?.toDouble() ?? 0;
   }
 
+  Future<TasaBcv?> obtenerTasaAnterior(DateTime fechaLimite) async {
+    final limite = DateTime(
+      fechaLimite.year,
+      fechaLimite.month,
+      fechaLimite.day,
+    );
+
+    String formatDate(DateTime d) =>
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}T00:00:00';
+
+    final inicio = formatDate(limite.subtract(const Duration(days: 30)));
+    final fin = formatDate(limite.subtract(const Duration(days: 1)));
+
+    final results = await Future.wait([
+      http
+          .get(Uri.parse(
+              '$_baseUrl/history/bcv?currency=dolar&start_date=$inicio&end_date=$fin&limit=50&order=desc'))
+          .timeout(const Duration(seconds: 10)),
+      http
+          .get(Uri.parse(
+              '$_baseUrl/history/bcv?currency=euro&start_date=$inicio&end_date=$fin&limit=50&order=desc'))
+          .timeout(const Duration(seconds: 10)),
+    ]);
+
+    List<Map<String, dynamic>> extraerRates(http.Response response) {
+      if (response.statusCode != 200) return [];
+      final body = json.decode(response.body) as Map<String, dynamic>;
+      final currencies = body['currencies'] as List<dynamic>? ?? [];
+      return currencies.cast<Map<String, dynamic>>();
+    }
+
+    final dolarRates = extraerRates(results[0]);
+    final euroRates = extraerRates(results[1]);
+
+    if (dolarRates.isEmpty || euroRates.isEmpty) return null;
+
+    Map<String, dynamic>? mejorTasaPorFecha(
+        List<Map<String, dynamic>> rates) {
+      for (final c in rates) {
+        final date = DateTime.parse(c['date'] as String);
+        final ef = TasaBcv(
+          usd: 0, eur: 0, usdt: 0,
+          fecha: date, origen: 'api',
+        ).fechaEfectiva;
+        if (ef.isBefore(limite)) {
+          return c;
+        }
+      }
+      return null;
+    }
+
+    final mejorUsd = mejorTasaPorFecha(dolarRates);
+    final mejorEur = mejorTasaPorFecha(euroRates);
+    if (mejorUsd == null || mejorEur == null) return null;
+
+    final usd = (mejorUsd['rate'] as num).toDouble();
+    final eur = (mejorEur['rate'] as num).toDouble();
+    final fechaTasa = DateTime.parse(mejorUsd['date'] as String);
+
+    return TasaBcv(
+      usd: usd,
+      eur: eur,
+      usdt: 0,
+      fecha: fechaTasa,
+      origen: 'api',
+    );
+  }
+
   Future<TasaBcv?> obtenerTasaHistorica(DateTime fecha) async {
     final fechaLimite = DateTime(fecha.year, fecha.month, fecha.day);
 

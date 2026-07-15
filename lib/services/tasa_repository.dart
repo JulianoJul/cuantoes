@@ -59,6 +59,21 @@ class TasaRepository {
     }
   }
 
+  Future<TasaBcv?> obtenerTasaAnterior(DateTime fechaLimite) async {
+    final cache = await _cache.obtenerTasaMasRecienteMenorQue(fechaLimite);
+    if (cache != null) return cache;
+
+    try {
+      final tasa = await _api.obtenerTasaAnterior(fechaLimite);
+      if (tasa != null) {
+        await _cache.guardarTasa(tasa);
+      }
+      return tasa;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<double?> obtenerUsdt() async {
     try {
       return await _api.obtenerUsdt();

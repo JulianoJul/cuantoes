@@ -102,20 +102,21 @@ class ConversorViewmodel extends ChangeNotifier {
       return;
     }
     final gen = _cargaGeneracion;
-    final ayer = DateTime.now().subtract(const Duration(days: 1));
-    final tasaAnterior = await _repository.obtenerTasaHistorica(ayer);
+    final actual = _tasa!;
+    final diaAnterior = actual.fechaEfectiva.subtract(const Duration(days: 1));
+    final tasaAnterior = await _repository.obtenerTasaAnterior(diaAnterior);
     if (_cargaGeneracion != gen) return;
     if (tasaAnterior == null) {
       variacion = null;
       return;
     }
-    final actual = _tasa!.de(_moneda);
-    final anterior = tasaAnterior.de(_moneda);
-    if (anterior <= 0) {
+    final valActual = actual.de(_moneda);
+    final valAnterior = tasaAnterior.de(_moneda);
+    if (valAnterior <= 0) {
       variacion = null;
       return;
     }
-    variacion = ((actual - anterior) / anterior) * 100;
+    variacion = ((valActual - valAnterior) / valAnterior) * 100;
   }
 
   Future<void> refrescarTasa() async {

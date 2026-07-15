@@ -26,6 +26,31 @@ class BcvCacheService {
     return TasaBcv.fromJson(json);
   }
 
+  Future<TasaBcv?> obtenerTasaMasRecienteMenorQue(DateTime fechaLimite) async {
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs.getKeys();
+    final lim = DateTime(
+      fechaLimite.year,
+      fechaLimite.month,
+      fechaLimite.day,
+    );
+    TasaBcv? mejor;
+    for (final k in keys) {
+      if (!k.startsWith(_keyPrefix)) continue;
+      final data = prefs.getString(k);
+      if (data == null) continue;
+      final json = jsonDecode(data) as Map<String, dynamic>;
+      final tasa = TasaBcv.fromJson(json);
+      if (tasa.fechaEfectiva.isBefore(lim)) {
+        if (mejor == null ||
+            tasa.fechaEfectiva.isAfter(mejor.fechaEfectiva)) {
+          mejor = tasa;
+        }
+      }
+    }
+    return mejor;
+  }
+
   Future<TasaBcv?> obtenerTasaPorFecha(DateTime fecha) async {
     final prefs = await SharedPreferences.getInstance();
     final data = prefs.getString(_keyFecha(fecha));
