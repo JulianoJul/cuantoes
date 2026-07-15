@@ -65,5 +65,18 @@ class BcvCacheService {
         _keyFecha(tasa.fechaEfectiva), jsonEncode(tasa.toJson()));
   }
 
+  static const _keyUltimaConsulta = 'ultima_consulta_api';
 
+  Future<DateTime?> obtenerUltimaConsulta() async {
+    final prefs = await SharedPreferences.getInstance();
+    final epoch = prefs.getInt(_keyUltimaConsulta);
+    if (epoch == null) return null;
+    return DateTime.fromMillisecondsSinceEpoch(epoch, isUtc: true);
+  }
+
+  Future<void> registrarConsulta() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(
+        _keyUltimaConsulta, DateTime.now().toUtc().millisecondsSinceEpoch);
+  }
 }

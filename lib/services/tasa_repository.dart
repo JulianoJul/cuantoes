@@ -23,10 +23,24 @@ class TasaRepository {
       return cache;
     }
 
+    if (cache != null) {
+      final ultimaConsulta = await _cache.obtenerUltimaConsulta();
+      if (ultimaConsulta != null) {
+        final ahora = DateTime.now().toUtc();
+        final diff = ahora.difference(ultimaConsulta).inMinutes;
+        if (diff < 30) {
+          // Cooldown activo (esperar 30 min entre consultas automáticas)
+          return cache;
+        }
+      }
+    }
+
     return refrescarTasa();
   }
 
   Future<TasaBcv> refrescarTasa() async {
+    await _cache.registrarConsulta();
+
     try {
       var tasa = await _api.obtenerTasa();
       tasa = await _aplicarHeuristicaFecha(tasa);
