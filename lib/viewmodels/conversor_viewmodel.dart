@@ -191,7 +191,14 @@ class ConversorViewmodel extends ChangeNotifier {
   }
 
   Future<void> seleccionarFecha(DateTime fecha) async {
-    _fechaSeleccionada = fecha;
+    final ahora = DateTime.now();
+    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
+    final sel = DateTime(fecha.year, fecha.month, fecha.day);
+    if (!sel.isBefore(hoy)) {
+      _fechaSeleccionada = null;
+    } else {
+      _fechaSeleccionada = sel;
+    }
     await cargarTasa();
   }
 
