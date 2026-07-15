@@ -4,7 +4,11 @@ import 'package:provider/provider.dart';
 import 'services/settings_provider.dart';
 import 'screens/conversor_screen.dart';
 
-void main() {
+import 'services/feriados_service.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await FeriadosService.cargarCache();
   runApp(const CuantoesApp());
 }
 

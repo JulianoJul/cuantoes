@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import '../models/tasa_bcv.dart';
 import '../services/tasa_repository.dart';
+import '../services/feriados_service.dart';
 import '../utils/feriados_ve.dart';
 
 enum ConversionDireccion { monedaAVes, vesAMoneda }
@@ -67,6 +68,9 @@ class ConversorViewmodel extends ChangeNotifier {
       }
       tasa ??= await _repository.obtenerTasa();
       if (_cargaGeneracion != generacion) return;
+      
+      // Sincronizamos feriados de Google en segundo plano
+      FeriadosService.sincronizar();
 
       _tasa = tasa;
       if (_fechaSeleccionada != null) {
@@ -129,6 +133,7 @@ class ConversorViewmodel extends ChangeNotifier {
 
     try {
       _tasa = await _repository.refrescarTasa();
+      FeriadosService.sincronizar(); // Sync en segundo plano
       _estado = EstadoTasa.listo;
       await _calcularVariacion();
       if (_entrada.isNotEmpty) convertir();

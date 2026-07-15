@@ -1,5 +1,12 @@
 Set<int> _feriadosFijos = {1, 19, 24, 5, 25};
 
+// Caché en memoria de los feriados obtenidos desde Google Calendar
+Set<String> feriadosGoogleCache = {};
+
+void setFeriadosGoogle(Set<String> feriados) {
+  feriadosGoogleCache = feriados;
+}
+
 int _feriadoMes(int dia) {
   const meses = <int, int>{
     1: 1,
@@ -35,6 +42,14 @@ bool esFeriadoBancario(DateTime fecha) {
   final d = fecha.day;
   final m = fecha.month;
 
+  // 1. Verificamos primero la fuente primaria (Google Calendar) si está disponible
+  if (feriadosGoogleCache.isNotEmpty) {
+    final dateStr =
+        '${fecha.year}${m.toString().padLeft(2, '0')}${d.toString().padLeft(2, '0')}';
+    if (feriadosGoogleCache.contains(dateStr)) return true;
+  }
+
+  // 2. Si no está en Google, usamos la lógica de fallback (fijos + pascua)
   if (_feriadosFijos.contains(d) && _feriadoMes(d) == m) return true;
 
   final pascua = _calcularPascua(fecha.year);
