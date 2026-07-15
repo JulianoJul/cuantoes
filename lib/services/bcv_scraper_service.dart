@@ -39,7 +39,7 @@ class BcvScraperService {
 
     final fecha = _extraerFechaValor(body) ?? DateTime.now();
 
-    return TasaBcv(
+    return TasaBcv.actual(
       usd: usd,
       eur: eur,
       usdt: 0,

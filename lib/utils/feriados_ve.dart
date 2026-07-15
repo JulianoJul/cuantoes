@@ -59,3 +59,26 @@ DateTime proximoDiaHabil(DateTime fecha) {
   }
   return ef;
 }
+
+/// Venezuela = UTC-4 (sin horario de verano).
+const _offsetVenezuela = Duration(hours: 4);
+
+/// Hora actual en Venezuela (UTC-4), independiente de la zona del dispositivo.
+DateTime ahoraVenezuela() {
+  return DateTime.now().toUtc().subtract(_offsetVenezuela);
+}
+
+/// Calcula la fecha efectiva BCV a partir de una fecha/hora de referencia.
+/// Si la hora es ≥ 14, la tasa aplica para el siguiente día hábil.
+DateTime calcularFechaEfectiva(DateTime fecha) {
+  var ef = DateTime(fecha.year, fecha.month, fecha.day);
+  if (fecha.hour >= 14) {
+    ef = ef.add(const Duration(days: 1));
+  }
+  return proximoDiaHabil(ef);
+}
+
+/// Fecha efectiva actual según la hora en Venezuela (UTC-4).
+DateTime fechaEfectivaActual() {
+  return calcularFechaEfectiva(ahoraVenezuela());
+}

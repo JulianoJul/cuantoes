@@ -1,4 +1,5 @@
 import '../models/tasa_bcv.dart';
+import '../utils/feriados_ve.dart';
 import 'bcv_api_service.dart';
 import 'bcv_cache_service.dart';
 import 'bcv_scraper_service.dart';
@@ -83,7 +84,7 @@ class TasaRepository {
   }
 
   bool _esTasaVigente(DateTime fechaEfectiva) {
-    final ahora = DateTime.now();
+    final ahora = ahoraVenezuela();
     final hoy = DateTime(ahora.year, ahora.month, ahora.day);
 
     if (fechaEfectiva.isBefore(hoy)) return false;

@@ -34,6 +34,7 @@ void main() {
         'usdt': 0,
         'fecha': mananaSinHora.toIso8601String(),
         'origen': 'api',
+        'fecha_efectiva': mananaSinHora.toIso8601String(),
       }),
     });
 
@@ -59,6 +60,7 @@ void main() {
         'usdt': 0,
         'fecha': mananaSinHora.toIso8601String(),
         'origen': 'api',
+        'fecha_efectiva': mananaSinHora.toIso8601String(),
       }),
     });
 

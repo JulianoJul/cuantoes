@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import '../models/tasa_bcv.dart';
 import '../services/tasa_repository.dart';
+import '../utils/feriados_ve.dart';
 
 enum ConversionDireccion { monedaAVes, vesAMoneda }
 
@@ -81,6 +82,8 @@ class ConversorViewmodel extends ChangeNotifier {
         );
         if (ef.isBefore(sel)) {
           _fechaSeleccionada = ef;
+        } else {
+          _fechaSeleccionada = null;
         }
       }
       _estado = EstadoTasa.listo;
@@ -165,6 +168,7 @@ class ConversorViewmodel extends ChangeNotifier {
             usdt: usdt,
             fecha: _tasa!.fecha,
             origen: _tasa!.origen,
+            fechaEfectiva: _tasa!.fechaEfectiva,
           );
         } else {
           _tasa = TasaBcv(
@@ -173,6 +177,7 @@ class ConversorViewmodel extends ChangeNotifier {
             usdt: usdt,
             fecha: DateTime.now(),
             origen: 'api',
+            fechaEfectiva: fechaEfectivaActual(),
           );
           _estado = EstadoTasa.listo;
         }
@@ -191,14 +196,7 @@ class ConversorViewmodel extends ChangeNotifier {
   }
 
   Future<void> seleccionarFecha(DateTime fecha) async {
-    final ahora = DateTime.now();
-    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
-    final sel = DateTime(fecha.year, fecha.month, fecha.day);
-    if (!sel.isBefore(hoy)) {
-      _fechaSeleccionada = null;
-    } else {
-      _fechaSeleccionada = sel;
-    }
+    _fechaSeleccionada = DateTime(fecha.year, fecha.month, fecha.day);
     await cargarTasa();
   }
 

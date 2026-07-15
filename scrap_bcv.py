@@ -10,6 +10,9 @@ from selenium.webdriver.support import expected_conditions as EC
 
 URL = "https://www.bcv.org.ve/"
 
+# Venezuela = UTC-4 (sin horario de verano)
+_OFFSET_VENEZUELA = datetime.timedelta(hours=4)
+
 
 FERIADOS_FIJOS = {
     (1, 1),     # Ano Nuevo
@@ -66,9 +69,16 @@ def _siguiente_dia_habil(fecha):
     return d
 
 
-def _fecha_efectiva(fecha):
-    ef = datetime.datetime(fecha.year, fecha.month, fecha.day)
-    if fecha.hour >= 14:
+def _ahora_venezuela():
+    """Hora actual en Venezuela (UTC-4), independiente de la zona del sistema."""
+    return datetime.datetime.utcnow() - _OFFSET_VENEZUELA
+
+
+def _fecha_efectiva():
+    """Fecha efectiva BCV según la hora actual en Venezuela."""
+    ahora = _ahora_venezuela()
+    ef = datetime.datetime(ahora.year, ahora.month, ahora.day)
+    if ahora.hour >= 14:
         ef += datetime.timedelta(days=1)
     return _siguiente_dia_habil(ef)
 
@@ -114,8 +124,8 @@ def scrape_bcv():
             print(json.dumps({"error": "No se encontro la tasa USD"}))
             sys.exit(1)
 
-        captura = datetime.datetime.now()
-        ef = _fecha_efectiva(captura)
+        captura = _ahora_venezuela()
+        ef = _fecha_efectiva()
         fecha_iso = ef.strftime("%Y-%m-%dT00:00:00")
         captura_iso = captura.isoformat()
 

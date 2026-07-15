@@ -13,7 +13,7 @@
 - **KISS + YAGNI**: solo lo pedido, nada "por si acaso"
 
 ## Estado Actual (Julio 2026)
-App Flutter para convertir USD/EUR/USDT↔VES usando la tasa oficial del BCV. Soporta conversión bidireccional con tres monedas (USD, EUR, USDT), selector de fecha con calendario para ver tasas históricas (con salto de fines de semana y feriados bancarios venezolanos), y tres capas de obtención de datos:
+App Flutter para convertir USD/EUR/USDT↔VES usando la tasa oficial del BCV. Soporta conversión bidireccional con tres monedas (USD, EUR, USDT), selector de fecha con calendario para ver tasas históricas (con salto de fines de semana y feriados bancarios venezolanos), y tres capas de obtención de datos. `fechaEfectiva` es un campo almacenado en `TasaBcv`, calculado a partir de la hora de Venezuela (UTC-4), no del timestamp de la API:
 
 1. **API REST**: `dolar-vzla.rafnixg.dev/api/v1/bcv/realtime` (principal) + `/api/v1/history/bcv` (histórico) + `/api/v1/binance/realtime_ves` (USDT)
 2. **Cache**: SharedPreferences (persistencia offline, búsqueda por clave más reciente)
@@ -29,7 +29,7 @@ Orden de resolución en `TasaRepository`:
 |---------|----------|
 | `lib/main.dart` | Entry point, CuantoesApp, localización es |
 | `lib/models/tasa_bcv.dart` | Modelo de tasa (USD, EUR, USDT, fecha, origen) + fechaEfectiva con feriados |
-| `lib/utils/feriados_ve.dart` | Feriados bancarios venezolanos (fijos + cálculo Pascua) |
+| `lib/utils/feriados_ve.dart` | Feriados bancarios venezolanos (fijos + cálculo Pascua), `ahoraVenezuela()`, `fechaEfectivaActual()` |
 | `lib/services/bcv_api_service.dart` | API REST (realtime + histórico + USDT) |
 | `lib/services/bcv_scraper_service.dart` | Scraping HTML del BCV (fallback, extrae "Fecha Valor") |
 | `lib/services/bcv_cache_service.dart` | Cache local con SharedPreferences |

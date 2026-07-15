@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/tasa_bcv.dart';
+import '../utils/feriados_ve.dart';
 
 class BcvApiService {
   static const _baseUrl = 'https://dolar-vzla.rafnixg.dev/api/v1';
@@ -35,7 +36,7 @@ class BcvApiService {
       throw Exception('API no devolvió USD y EUR');
     }
 
-    return TasaBcv(
+    return TasaBcv.actual(
       usd: usd,
       eur: eur,
       usdt: 0,
@@ -97,10 +98,7 @@ class BcvApiService {
         List<Map<String, dynamic>> rates) {
       for (final c in rates) {
         final date = DateTime.parse(c['date'] as String);
-        final ef = TasaBcv(
-          usd: 0, eur: 0, usdt: 0,
-          fecha: date, origen: 'api',
-        ).fechaEfectiva;
+        final ef = calcularFechaEfectiva(date);
         if (ef.isBefore(limite)) {
           return c;
         }
@@ -122,6 +120,7 @@ class BcvApiService {
       usdt: 0,
       fecha: fechaTasa,
       origen: 'api',
+      fechaEfectiva: calcularFechaEfectiva(fechaTasa),
     );
   }
 
@@ -165,10 +164,7 @@ class BcvApiService {
         List<Map<String, dynamic>> rates) {
       for (final c in rates) {
         final date = DateTime.parse(c['date'] as String);
-        final ef = TasaBcv(
-          usd: 0, eur: 0, usdt: 0,
-          fecha: date, origen: 'api',
-        ).fechaEfectiva;
+        final ef = calcularFechaEfectiva(date);
         if (!ef.isAfter(fechaLimite)) {
           return c;
         }
@@ -190,6 +186,7 @@ class BcvApiService {
       usdt: 0,
       fecha: fechaTasa,
       origen: 'api',
+      fechaEfectiva: calcularFechaEfectiva(fechaTasa),
     );
   }
 }

@@ -96,3 +96,21 @@
   - Solo se calcula para tasa actual (sin fecha seleccionada), no para USDT
   - No bloquea la UI si falla (variación queda null)
 - **Impacto:** Nueva propiedad `variacion` en ViewModel. UI muestra ▲/▼ + porcentaje en la línea de tasa correspondiente.
+
+---
+
+## DEC-009: fechaEfectiva como campo almacenado con timezone Venezuela
+
+- **Origen:** `[Bug reportado por usuario]`
+- **Contexto y Causa:** La API realtime (`dolar-vzla.rafnixg.dev`) devuelve el timestamp del servidor (UTC), no la hora de publicación del BCV. El getter `fechaEfectiva` usaba `fecha.hour >= 14` con ese timestamp UTC, causando que a mediodía en Venezuela (16:XX UTC) la app mostrara la tasa del día siguiente (que aún no existía).
+- **Decisión:**
+  - `fechaEfectiva` pasa de getter computado a campo `final DateTime` almacenado
+  - Se calcula una sola vez al crear el modelo, usando `DateTime.now().toUtc() - 4h` (hora Venezuela, sin DST)
+  - Factory `TasaBcv.actual()` para tasas en tiempo real (usa hora VE)
+  - `calcularFechaEfectiva(fecha)` para tasas históricas (usa la fecha del registro)
+  - `fromJson` con retrocompatibilidad: si no hay `fecha_efectiva` en JSON, se computa desde `fecha`
+  - `_esTasaVigente` en `TasaRepository` también usa `ahoraVenezuela()`
+- **Alternativas evaluadas:**
+  - Clamp del getter con `DateTime.now()` — descartado: getter impuro, dificulta testing
+  - Parsear timezone del servidor API — descartado: frágil, la API no documenta su timezone
+- **Impacto:** `TasaBcv` gana campo `fechaEfectiva` y factory `.actual()`. `feriados_ve.dart` gana 3 funciones (`ahoraVenezuela`, `calcularFechaEfectiva`, `fechaEfectivaActual`). Cache persiste `fecha_efectiva` en JSON. Retrocompatible con cache antiguo.

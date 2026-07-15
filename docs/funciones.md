@@ -6,7 +6,8 @@
 |-------|-----------|-------------|
 | `TasaBcv` | `usd`, `eur`, `usdt`, `fecha`, `origen` | Modelo de tasa de cambio BCV |
 | `TasaBcv.de(moneda)` | `moneda`: 'USD', 'EUR' o 'USDT' | Retorna la tasa para una moneda |
-| `TasaBcv.fechaEfectiva` | — | Getter: fecha hábil calculada (≥14h +1 día, salta findes y feriados) |
+| `TasaBcv.fechaEfectiva` | — | Campo: fecha efectiva BCV almacenada (calculada con hora Venezuela UTC-4) |
+| `TasaBcv.actual()` | — | Factory: crea TasaBcv con fechaEfectiva calculada desde hora actual Venezuela (UTC-4) |
 | `TasaBcv.toJson()` / `fromJson()` | — | Serialización JSON |
 
 ## Servicios
@@ -47,6 +48,9 @@
 |-------------|-------------|
 | `esFeriadoBancario(fecha)` | True si la fecha es feriado bancario VE (fijos + móviles) |
 | `proximoDiaHabil(fecha)` | Avanza al siguiente día hábil (salta findes y feriados) |
+| `ahoraVenezuela()` | Hora actual en Venezuela (UTC-4), independiente de la zona del dispositivo |
+| `calcularFechaEfectiva(fecha)` | Calcula fecha efectiva BCV: hora ≥ 14 → +1 día → próximo día hábil |
+| `fechaEfectivaActual()` | Fecha efectiva actual según hora Venezuela (UTC-4) |
 
 ## Enums
 
