@@ -63,20 +63,33 @@ class TasaRepository {
     final ahora = ahoraVenezuela();
     if (ahora.hour < 14) return nuevaTasa;
 
-    final cache = await _cache.obtenerTasa();
+    var cache = await _cache.obtenerTasa();
+    
+    // Si la app está recién instalada o sin caché, buscamos la tasa histórica de "hoy"
+    if (cache == null) {
+      final hoy = DateTime(ahora.year, ahora.month, ahora.day);
+      try {
+        cache = await _api.obtenerTasaHistorica(hoy);
+      } catch (_) {}
+    }
+
     if (cache == null) return nuevaTasa;
 
     // Si la tasa nueva es idéntica a la anterior, significa que BCV aún no ha
-    // actualizado el valor para mañana. Mantenemos la fecha efectiva anterior.
+    // actualizado el valor para mañana. Mantenemos la fecha efectiva anterior (máximo hoy).
     final diffUsd = (nuevaTasa.usd - cache.usd).abs();
     if (diffUsd < 0.00001) {
+      final hoy = DateTime(ahora.year, ahora.month, ahora.day);
+      var ef = cache.fechaEfectiva;
+      if (ef.isAfter(hoy)) ef = hoy;
+
       return TasaBcv(
         usd: nuevaTasa.usd,
         eur: nuevaTasa.eur,
         usdt: nuevaTasa.usdt,
         fecha: nuevaTasa.fecha,
         origen: nuevaTasa.origen,
-        fechaEfectiva: cache.fechaEfectiva,
+        fechaEfectiva: ef,
       );
     }
     return nuevaTasa;
