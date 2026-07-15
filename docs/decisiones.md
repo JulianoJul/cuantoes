@@ -114,3 +114,19 @@
   - Clamp del getter con `DateTime.now()` — descartado: getter impuro, dificulta testing
   - Parsear timezone del servidor API — descartado: frágil, la API no documenta su timezone
 - **Impacto:** `TasaBcv` gana campo `fechaEfectiva` y factory `.actual()`. `feriados_ve.dart` gana 3 funciones (`ahoraVenezuela`, `calcularFechaEfectiva`, `fechaEfectivaActual`). Cache persiste `fecha_efectiva` en JSON. Retrocompatible con cache antiguo.
+
+---
+
+## DEC-010: Menú lateral, Modo Oscuro y Coma Automática
+
+- **Origen:** `[Instrucción Explícita del Usuario]`
+- **Contexto y Causa:** Se requería un menú lateral (Drawer) para albergar opciones secundarias sin sobrecargar la UI principal. Específicamente, se pedía:
+  1. Toggle de "Modo Coma Automática": un formateador de entrada que simule el desplazamiento de centavos (ej: al teclear `1` -> `0,01`, luego `5` -> `0,15`, luego `0` -> `1,50`).
+  2. Toggle de Modo Oscuro.
+  3. Mover la etiqueta "Datos desde [API/BCV directo]" al menú lateral para limpiar la pantalla de inicio.
+- **Decisión:**
+  - Implementar `SettingsProvider` (ChangeNotifier) para gestionar y persistir las configuraciones en `SharedPreferences`.
+  - Registrar `ChangeNotifierProvider<SettingsProvider>` a nivel global en `main.dart` envolviendo la app para permitir cambios de tema dinámicos con `themeMode`.
+  - Crear `AutomaticCommaFormatter` (TextInputFormatter) para aplicar la lógica de desplazamiento de comas cuando el modo está activo.
+  - Diseñar el menú (`Drawer`) en `ConversorScreen` con los interruptores y el indicador de origen de datos en el footer.
+- **Impacto:** La UI es más limpia y moderna. Los tests se adaptaron para inicializar `SettingsProvider` automáticamente dentro de `CuantoesApp`.

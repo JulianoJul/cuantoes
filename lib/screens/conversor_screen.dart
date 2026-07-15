@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../viewmodels/conversor_viewmodel.dart';
+import '../services/settings_provider.dart';
+import '../utils/automatic_comma_formatter.dart';
 
 class ConversorScreen extends StatelessWidget {
   const ConversorScreen({super.key});
@@ -22,23 +24,34 @@ class _ConversorBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<ConversorViewmodel>();
+    final settings = context.watch<SettingsProvider>();
     final formatter = NumberFormat('#,##0.00', 'es_VE');
     final dateFormatter = DateFormat('dd/MM/yyyy');
 
     return Scaffold(
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
+      ),
+      drawer: _buildDrawer(context, vm, settings),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           child: Column(
             children: [
-              const SizedBox(height: 20),
               _buildHeader(),
               const SizedBox(height: 12),
               _buildSelectorMoneda(context, vm),
               const SizedBox(height: 8),
               _buildSelectorFecha(context, vm, dateFormatter),
               const SizedBox(height: 20),
-              _buildEntrada(vm),
+              _buildEntrada(vm, settings),
               const SizedBox(height: 20),
               _buildSwapButton(vm),
               const SizedBox(height: 20),
@@ -46,12 +59,63 @@ class _ConversorBody extends StatelessWidget {
               const SizedBox(height: 16),
               _buildEstadoBcv(context, vm, formatter),
               const Spacer(),
-              _buildOrigen(vm),
               _buildBotonRecargar(vm),
               const SizedBox(height: 12),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildDrawer(
+      BuildContext context, ConversorViewmodel vm, SettingsProvider settings) {
+    return Drawer(
+      child: Column(
+        children: [
+          DrawerHeader(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primaryContainer,
+            ),
+            child: const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.currency_exchange, size: 40),
+                  SizedBox(height: 10),
+                  Text(
+                    'Cuantoes BCV',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SwitchListTile(
+            title: const Text('Modo Oscuro'),
+            subtitle: const Text('Alternar tema visual'),
+            value: settings.isDarkMode,
+            onChanged: (_) => settings.toggleDarkMode(),
+            secondary: Icon(settings.isDarkMode ? Icons.dark_mode : Icons.light_mode),
+          ),
+          SwitchListTile(
+            title: const Text('Coma Automática'),
+            subtitle: const Text('Desplaza decimales al escribir (0,00)'),
+            value: settings.isAutomaticComma,
+            onChanged: (val) {
+              settings.toggleAutomaticComma();
+              vm.entradaController.clear();
+              vm.setEntrada('');
+            },
+            secondary: const Icon(Icons.edit_note),
+          ),
+          const Spacer(),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: _buildOrigen(vm),
+          ),
+          const SizedBox(height: 12),
+        ],
       ),
     );
   }
@@ -145,7 +209,7 @@ class _ConversorBody extends StatelessWidget {
     }
   }
 
-  Widget _buildEntrada(ConversorViewmodel vm) {
+  Widget _buildEntrada(ConversorViewmodel vm, SettingsProvider settings) {
     return IgnorePointer(
       ignoring: vm.entradaBloqueada,
       child: Opacity(
@@ -155,14 +219,16 @@ class _ConversorBody extends StatelessWidget {
           onChanged: vm.setEntrada,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           inputFormatters: [
-            TextInputFormatter.withFunction((oldValue, newValue) {
-              final text = newValue.text;
-              if (text.isEmpty) return newValue;
-              if (RegExp(r'^\d*([,.]\d{0,2})?$').hasMatch(text)) {
-                return newValue;
-              }
-              return oldValue;
-            }),
+            AutomaticCommaFormatter(active: settings.isAutomaticComma),
+            if (!settings.isAutomaticComma)
+              TextInputFormatter.withFunction((oldValue, newValue) {
+                final text = newValue.text;
+                if (text.isEmpty) return newValue;
+                if (RegExp(r'^\d*([,.]\d{0,2})?$').hasMatch(text)) {
+                  return newValue;
+                }
+                return oldValue;
+              }),
           ],
           textAlign: TextAlign.center,
           style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w600),

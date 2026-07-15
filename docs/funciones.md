@@ -25,6 +25,10 @@
 | `TasaRepository.refrescarTasa()` | Fuerza actualización: API → cache → scraper |
 | `TasaRepository.obtenerTasaHistorica(fecha)` | Histórico vía cache → API |
 | `TasaRepository.obtenerUsdt()` | USDT vía API |
+| `SettingsProvider.isDarkMode` | Getter: indica si el modo oscuro está activo |
+| `SettingsProvider.isAutomaticComma` | Getter: indica si el modo de coma automática está activo |
+| `SettingsProvider.toggleDarkMode()` | Método: alterna el modo oscuro y lo persiste |
+| `SettingsProvider.toggleAutomaticComma()` | Método: alterna el modo de coma automática y lo persiste |
 
 ## ViewModel
 
@@ -51,6 +55,7 @@
 | `ahoraVenezuela()` | Hora actual en Venezuela (UTC-4), independiente de la zona del dispositivo |
 | `calcularFechaEfectiva(fecha)` | Calcula fecha efectiva BCV: hora ≥ 14 → +1 día → próximo día hábil |
 | `fechaEfectivaActual()` | Fecha efectiva actual según hora Venezuela (UTC-4) |
+| `AutomaticCommaFormatter` | Formateador de texto que desplaza decimales al escribir (ej: 15 -> 0,15) si está activo |
 
 ## Enums
 
