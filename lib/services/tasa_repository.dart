@@ -28,19 +28,44 @@ class TasaRepository {
 
   Future<TasaBcv> refrescarTasa() async {
     try {
-      final tasa = await _api.obtenerTasa();
+      var tasa = await _api.obtenerTasa();
+      tasa = await _aplicarHeuristicaFecha(tasa);
       await _cache.guardarTasa(tasa);
       return tasa;
     } catch (_) {
       final cache = await _cache.obtenerTasa();
       if (cache != null) return cache;
-      final scrape = await _scraper.obtenerTasa();
+      var scrape = await _scraper.obtenerTasa();
       if (scrape != null) {
+        scrape = await _aplicarHeuristicaFecha(scrape);
         await _cache.guardarTasa(scrape);
         return scrape;
       }
       rethrow;
     }
+  }
+
+  Future<TasaBcv> _aplicarHeuristicaFecha(TasaBcv nuevaTasa) async {
+    final ahora = ahoraVenezuela();
+    if (ahora.hour < 14) return nuevaTasa;
+
+    final cache = await _cache.obtenerTasa();
+    if (cache == null) return nuevaTasa;
+
+    // Si la tasa nueva es idéntica a la anterior, significa que BCV aún no ha
+    // actualizado el valor para mañana. Mantenemos la fecha efectiva anterior.
+    final diffUsd = (nuevaTasa.usd - cache.usd).abs();
+    if (diffUsd < 0.00001) {
+      return TasaBcv(
+        usd: nuevaTasa.usd,
+        eur: nuevaTasa.eur,
+        usdt: nuevaTasa.usdt,
+        fecha: nuevaTasa.fecha,
+        origen: nuevaTasa.origen,
+        fechaEfectiva: cache.fechaEfectiva,
+      );
+    }
+    return nuevaTasa;
   }
 
   Future<TasaBcv?> obtenerTasaHistorica(DateTime fecha) async {

@@ -130,3 +130,15 @@
   - Crear `AutomaticCommaFormatter` (TextInputFormatter) para aplicar la lógica de desplazamiento de comas cuando el modo está activo.
   - Diseñar el menú (`Drawer`) en `ConversorScreen` con los interruptores y el indicador de origen de datos en el footer.
 - **Impacto:** La UI es más limpia y moderna. Los tests se adaptaron para inicializar `SettingsProvider` automáticamente dentro de `CuantoesApp`.
+
+---
+
+## DEC-011: Heurística para evitar adelanto prematuro de fechaEfectiva
+
+- **Origen:** `[Bug reportado por usuario]`
+- **Contexto y Causa:** Si el BCV se retrasa en actualizar la tasa después de las 2:00 PM, la regla general de `hora >= 14 -> próximo día hábil` provocaba que la app mostrara que la tasa (aún no actualizada) pertenecía a "mañana".
+- **Decisión:**
+  - En `TasaRepository.refrescarTasa()`, después de obtener la nueva tasa (ya sea por API o scraping), se compara su valor en dólares (`usd`) con el valor de la última tasa almacenada en caché.
+  - Si la diferencia es menor a `0.00001` (es decir, el BCV no ha actualizado el valor), se descarta el avance de fecha y se conserva la `fechaEfectiva` de la tasa en caché.
+  - Se implementó esto en un método interno `_aplicarHeuristicaFecha(TasaBcv nuevaTasa)`.
+- **Impacto:** La fecha mostrada en la UI se mantiene fiel a la realidad incluso si hay retrasos en la publicación del BCV por la tarde.
