@@ -41,13 +41,8 @@ class ConversorViewmodel extends ChangeNotifier {
 
   bool get esMonedaAVes => _direccion == ConversionDireccion.monedaAVes;
 
-  bool get tasaSiguienteDisponible {
-    if (_fechaSeleccionada != null || _tasa == null) return false;
-    final hoy = DateTime.now();
-    final ef = _tasa!.fechaEfectiva;
-    return DateTime(ef.year, ef.month, ef.day)
-        .isAfter(DateTime(hoy.year, hoy.month, hoy.day));
-  }
+  bool _tasaSiguienteDisponible = false;
+  bool get tasaSiguienteDisponible => _tasaSiguienteDisponible;
 
   double get tasaActual => _tasa?.de(_moneda) ?? 0;
   double? variacion;
@@ -63,6 +58,7 @@ class ConversorViewmodel extends ChangeNotifier {
   Future<void> cargarTasa() async {
     _estado = EstadoTasa.cargando;
     _error = '';
+    _tasaSiguienteDisponible = false;
     notifyListeners();
 
     final generacion = ++_cargaGeneracion;
@@ -81,6 +77,9 @@ class ConversorViewmodel extends ChangeNotifier {
       FeriadosService.sincronizar();
 
       _tasa = tasa;
+      _tasaSiguienteDisponible =
+          _fechaSeleccionada == null && await _repository.existeTasaSiguiente();
+      if (_cargaGeneracion != generacion) return;
       if (_fechaSeleccionada != null) {
         final sel = DateTime(
           _fechaSeleccionada!.year,
@@ -139,6 +138,7 @@ class ConversorViewmodel extends ChangeNotifier {
 
     try {
       _tasa = await _repository.refrescarTasa();
+      _tasaSiguienteDisponible = await _repository.existeTasaSiguiente();
       FeriadosService.sincronizar(); // Sync en segundo plano
       _estado = EstadoTasa.listo;
       await _calcularVariacion();
