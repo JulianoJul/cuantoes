@@ -115,8 +115,7 @@ class ConversorViewmodel extends ChangeNotifier {
     }
     final gen = _cargaGeneracion;
     final actual = _tasa!;
-    final diaAnterior = actual.fechaEfectiva.subtract(const Duration(days: 1));
-    final tasaAnterior = await _repository.obtenerTasaAnterior(diaAnterior);
+    final tasaAnterior = await _repository.obtenerTasaAnterior(actual.fechaEfectiva);
     if (_cargaGeneracion != gen) return;
     if (tasaAnterior == null) {
       variacion = null;
