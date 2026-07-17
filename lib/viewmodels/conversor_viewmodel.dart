@@ -41,6 +41,13 @@ class ConversorViewmodel extends ChangeNotifier {
 
   bool get esMonedaAVes => _direccion == ConversionDireccion.monedaAVes;
 
+  bool get tasaSiguienteDisponible {
+    if (_fechaSeleccionada != null || _tasa == null) return false;
+    final hoy = DateTime.now();
+    final ef = _tasa!.fechaEfectiva;
+    return ef.year != hoy.year || ef.month != hoy.month || ef.day != hoy.day;
+  }
+
   double get tasaActual => _tasa?.de(_moneda) ?? 0;
   double? variacion;
 

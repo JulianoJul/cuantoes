@@ -163,10 +163,14 @@ class _ConversorBody extends StatelessWidget {
 
     final hoy = DateTime.now();
 
+    final mostrarProxima = vm.tasaSiguienteDisponible;
+
     String label;
     if (vm.fechaSeleccionada != null) {
       final sel = vm.fechaSeleccionada!;
       label = _formatearEtiqueta(sel, formatter);
+    } else if (mostrarProxima) {
+      label = _formatearEtiqueta(hoy, formatter);
     } else {
       final ef = vm.tasa?.fechaEfectiva ?? hoy;
       label = _formatearEtiqueta(ef, formatter);
@@ -175,20 +179,34 @@ class _ConversorBody extends StatelessWidget {
     final mostrarVolver = vm.fechaSeleccionada != null &&
         vm.fechaSeleccionada!.isBefore(DateTime(hoy.year, hoy.month, hoy.day));
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        if (mostrarVolver)
-          IconButton(
-            onPressed: () => vm.volverAHoy(),
-            icon: const Icon(Icons.today, size: 20),
-            tooltip: 'Volver a hoy',
-          ),
-        TextButton.icon(
-          onPressed: () => _abrirCalendario(context, vm),
-          icon: const Icon(Icons.calendar_today, size: 18),
-          label: Text(label),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (mostrarVolver)
+              IconButton(
+                onPressed: () => vm.volverAHoy(),
+                icon: const Icon(Icons.today, size: 20),
+                tooltip: 'Volver a hoy',
+              ),
+            TextButton.icon(
+              onPressed: () => _abrirCalendario(context, vm),
+              icon: const Icon(Icons.calendar_today, size: 18),
+              label: Text(label),
+            ),
+          ],
         ),
+        if (mostrarProxima)
+          Text(
+            'Tasa siguiente disponible',
+            style: TextStyle(
+              fontSize: 11,
+              color: Theme.of(context).colorScheme.primary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
       ],
     );
   }
@@ -274,6 +292,17 @@ class _ConversorBody extends StatelessWidget {
                     fontSize: 28, fontWeight: FontWeight.w600),
                 textAlign: TextAlign.center,
               ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.copy, size: 18),
+              onPressed: () {
+                final prefix = vm.esMonedaAVes ? 'Bs. ' : '${vm.moneda} ';
+                Clipboard.setData(ClipboardData(
+                  text: '$prefix${formatter.format(double.parse(vm.resultado.replaceAll(',', '.')))}',
+                ));
+              },
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Copiar resultado',
             ),
           ],
         ),
