@@ -45,7 +45,8 @@ class ConversorViewmodel extends ChangeNotifier {
     if (_fechaSeleccionada != null || _tasa == null) return false;
     final hoy = DateTime.now();
     final ef = _tasa!.fechaEfectiva;
-    return ef.year != hoy.year || ef.month != hoy.month || ef.day != hoy.day;
+    return DateTime(ef.year, ef.month, ef.day)
+        .isAfter(DateTime(hoy.year, hoy.month, hoy.day));
   }
 
   double get tasaActual => _tasa?.de(_moneda) ?? 0;
@@ -93,8 +94,6 @@ class ConversorViewmodel extends ChangeNotifier {
         );
         if (ef.isBefore(sel)) {
           _fechaSeleccionada = ef;
-        } else {
-          _fechaSeleccionada = null;
         }
       }
       _estado = EstadoTasa.listo;
