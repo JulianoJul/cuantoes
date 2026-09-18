@@ -23,7 +23,7 @@ class FeriadosService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final lastSyncStr = prefs.getString(_lastSyncKey);
-      
+
       // Sincronizar solo una vez al día para evitar peticiones innecesarias
       if (lastSyncStr != null) {
         final lastSync = DateTime.parse(lastSyncStr);

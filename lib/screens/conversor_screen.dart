@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../viewmodels/conversor_viewmodel.dart';
 import '../services/settings_provider.dart';
 import '../utils/automatic_comma_formatter.dart';
+import '../utils/feriados_ve.dart';
 
 class ConversorScreen extends StatelessWidget {
   const ConversorScreen({super.key});
@@ -69,7 +70,10 @@ class _ConversorBody extends StatelessWidget {
   }
 
   Widget _buildDrawer(
-      BuildContext context, ConversorViewmodel vm, SettingsProvider settings) {
+    BuildContext context,
+    ConversorViewmodel vm,
+    SettingsProvider settings,
+  ) {
     return Drawer(
       child: Column(
         children: [
@@ -96,7 +100,9 @@ class _ConversorBody extends StatelessWidget {
             subtitle: const Text('Alternar tema visual'),
             value: settings.isDarkMode,
             onChanged: (_) => settings.toggleDarkMode(),
-            secondary: Icon(settings.isDarkMode ? Icons.dark_mode : Icons.light_mode),
+            secondary: Icon(
+              settings.isDarkMode ? Icons.dark_mode : Icons.light_mode,
+            ),
           ),
           SwitchListTile(
             title: const Text('Coma Automática'),
@@ -110,10 +116,7 @@ class _ConversorBody extends StatelessWidget {
             secondary: const Icon(Icons.edit_note),
           ),
           const Spacer(),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: _buildOrigen(vm),
-          ),
+          Padding(padding: const EdgeInsets.all(16.0), child: _buildOrigen(vm)),
           const SizedBox(height: 12),
         ],
       ),
@@ -147,7 +150,10 @@ class _ConversorBody extends StatelessWidget {
   }
 
   Widget _chipMoneda(
-      BuildContext context, ConversorViewmodel vm, String moneda) {
+    BuildContext context,
+    ConversorViewmodel vm,
+    String moneda,
+  ) {
     final selected = vm.moneda == moneda;
     return ChoiceChip(
       label: Text(moneda),
@@ -158,10 +164,13 @@ class _ConversorBody extends StatelessWidget {
   }
 
   Widget _buildSelectorFecha(
-      BuildContext context, ConversorViewmodel vm, DateFormat formatter) {
+    BuildContext context,
+    ConversorViewmodel vm,
+    DateFormat formatter,
+  ) {
     if (vm.moneda == 'USDT') return const SizedBox.shrink();
 
-    final hoy = DateTime.now();
+    final hoy = _hoyVenezuela();
 
     final mostrarProxima = vm.tasaSiguienteDisponible;
 
@@ -176,8 +185,9 @@ class _ConversorBody extends StatelessWidget {
       label = _formatearEtiqueta(ef, formatter);
     }
 
-    final mostrarVolver = vm.fechaSeleccionada != null &&
-        vm.fechaSeleccionada!.isBefore(DateTime(hoy.year, hoy.month, hoy.day));
+    final mostrarVolver =
+        vm.fechaSeleccionada != null &&
+        _soloFecha(vm.fechaSeleccionada!).isBefore(hoy);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -212,14 +222,20 @@ class _ConversorBody extends StatelessWidget {
   }
 
   Future<void> _abrirCalendario(
-      BuildContext context, ConversorViewmodel vm) async {
+    BuildContext context,
+    ConversorViewmodel vm,
+  ) async {
+    final hoy = _hoyVenezuela();
+    final firstDate = DateTime(2016, 1, 1);
+    final lastDate = hoy.add(const Duration(days: 1));
+    final requestedDate = vm.fechaSeleccionada ?? vm.tasa?.fechaEfectiva ?? hoy;
+    final initialDate = _clampDate(requestedDate, firstDate, lastDate);
+
     final picked = await showDatePicker(
       context: context,
-      initialDate: vm.fechaSeleccionada ?? vm.tasa?.fechaEfectiva ?? DateTime.now(),
-      firstDate: DateTime(2016, 1, 1),
-      lastDate: DateTime.now().add(const Duration(days: 1)),
-      selectableDayPredicate: (day) =>
-          day.weekday != DateTime.saturday && day.weekday != DateTime.sunday,
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: lastDate,
       locale: const Locale('es'),
     );
     if (picked != null) {
@@ -287,9 +303,12 @@ class _ConversorBody extends StatelessWidget {
             Flexible(
               child: Text(
                 formatter.format(
-                    double.parse(vm.resultado.replaceAll(',', '.'))),
+                  double.parse(vm.resultado.replaceAll(',', '.')),
+                ),
                 style: const TextStyle(
-                    fontSize: 28, fontWeight: FontWeight.w600),
+                  fontSize: 28,
+                  fontWeight: FontWeight.w600,
+                ),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -297,9 +316,12 @@ class _ConversorBody extends StatelessWidget {
               icon: const Icon(Icons.copy, size: 18),
               onPressed: () {
                 final prefix = vm.esMonedaAVes ? 'Bs. ' : '${vm.moneda} ';
-                Clipboard.setData(ClipboardData(
-                  text: '$prefix${formatter.format(double.parse(vm.resultado.replaceAll(',', '.')))}',
-                ));
+                Clipboard.setData(
+                  ClipboardData(
+                    text:
+                        '$prefix${formatter.format(double.parse(vm.resultado.replaceAll(',', '.')))}',
+                  ),
+                );
               },
               visualDensity: VisualDensity.compact,
               tooltip: 'Copiar resultado',
@@ -322,7 +344,10 @@ class _ConversorBody extends StatelessWidget {
   }
 
   Widget _buildEstadoBcv(
-      BuildContext context, ConversorViewmodel vm, NumberFormat formatter) {
+    BuildContext context,
+    ConversorViewmodel vm,
+    NumberFormat formatter,
+  ) {
     final dateFormatter = DateFormat('dd/MM/yyyy');
 
     switch (vm.estado) {
@@ -339,14 +364,17 @@ class _ConversorBody extends StatelessWidget {
             children: [
               const Icon(Icons.error_outline, color: Colors.red, size: 20),
               const SizedBox(height: 4),
-              Text(vm.error,
-                  style: const TextStyle(color: Colors.red, fontSize: 12),
-                  textAlign: TextAlign.center),
+              Text(
+                vm.error,
+                style: const TextStyle(color: Colors.red, fontSize: 12),
+                textAlign: TextAlign.center,
+              ),
             ],
           ),
         );
       case EstadoTasa.listo:
         final t = vm.tasa!;
+        final fechaAplicada = vm.fechaEfectivaAplicada ?? t.fechaEfectiva;
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -365,11 +393,14 @@ class _ConversorBody extends StatelessWidget {
               ],
               const SizedBox(height: 6),
               Text(
-                dateFormatter.format(t.fechaEfectiva),
+                vm.fechaSeleccionada != null
+                    ? 'Tasa aplicada: ${dateFormatter.format(fechaAplicada)}'
+                    : dateFormatter.format(fechaAplicada),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onPrimaryContainer
-                          .withValues(alpha: 0.6),
-                    ),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onPrimaryContainer.withValues(alpha: 0.6),
+                ),
               ),
             ],
           ),
@@ -378,22 +409,26 @@ class _ConversorBody extends StatelessWidget {
   }
 
   Widget _rateLine(
-      NumberFormat formatter, ConversorViewmodel vm, String moneda, double valor) {
+    NumberFormat formatter,
+    ConversorViewmodel vm,
+    String moneda,
+    double valor,
+  ) {
     String? variacionStr;
     Color? variacionColor;
-    if (vm.variacion != null && vm.moneda == moneda) {
+    if (vm.variacion != null && vm.moneda == moneda && moneda != 'USDT') {
       final v = vm.variacion!;
-      variacionStr =
-          '${v >= 0 ? "▲" : "▼"} ${v.toStringAsFixed(2)}%';
+      variacionStr = '${v >= 0 ? "▲" : "▼"} ${v.toStringAsFixed(2)}%';
       variacionColor = v >= 0 ? Colors.green : Colors.red;
     }
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(moneda,
-            style:
-                const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+        Text(
+          moneda,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+        ),
         const SizedBox(width: 4),
         Text('1 = Bs. ${formatter.format(valor)}'),
         if (variacionStr != null) ...[
@@ -411,8 +446,9 @@ class _ConversorBody extends StatelessWidget {
     final origen = vm.tasa?.origen ?? '';
     if (origen.isEmpty) return const SizedBox.shrink();
 
-    final icono = origen == 'scraping' ? Icons.language : Icons.cloud;
-    final etiqueta = origen == 'scraping' ? 'BCV directo' : 'API';
+    final esScraping = origen.startsWith('scraping');
+    final icono = esScraping ? Icons.language : Icons.cloud;
+    final etiqueta = esScraping ? 'BCV directo' : 'API';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -439,19 +475,41 @@ class _ConversorBody extends StatelessWidget {
   }
 
   String _formatearEtiqueta(DateTime fecha, DateFormat formatter) {
-    final hoy = DateTime.now();
-    final fechaStr = formatter.format(fecha);
+    final dia = _soloFecha(fecha);
+    final hoy = _hoyVenezuela();
+    final fechaStr = formatter.format(dia);
 
-    if (_esMismaFecha(fecha, hoy)) return 'Hoy - $fechaStr';
+    if (_esMismaFecha(dia, hoy)) return 'Hoy - $fechaStr';
 
     final manana = hoy.add(const Duration(days: 1));
-    if (_esMismaFecha(fecha, manana)) return 'Mañana - $fechaStr';
+    if (_esMismaFecha(dia, manana)) return 'Mañana - $fechaStr';
 
     const dias = [
-      'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'
+      'Lunes',
+      'Martes',
+      'Miércoles',
+      'Jueves',
+      'Viernes',
+      'Sábado',
+      'Domingo',
     ];
-    final nombre = dias[fecha.weekday - 1];
+    final nombre = dias[dia.weekday - 1];
     return '$nombre - $fechaStr';
+  }
+
+  DateTime _hoyVenezuela() {
+    final ahora = ahoraVenezuela();
+    return DateTime(ahora.year, ahora.month, ahora.day);
+  }
+
+  DateTime _soloFecha(DateTime fecha) =>
+      DateTime(fecha.year, fecha.month, fecha.day);
+
+  DateTime _clampDate(DateTime fecha, DateTime firstDate, DateTime lastDate) {
+    final dia = _soloFecha(fecha);
+    if (dia.isBefore(firstDate)) return firstDate;
+    if (dia.isAfter(lastDate)) return lastDate;
+    return dia;
   }
 
   bool _esMismaFecha(DateTime a, DateTime b) =>

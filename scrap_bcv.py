@@ -1,6 +1,7 @@
 import sys
 import json
 import datetime
+import re
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.common.by import By
@@ -20,7 +21,9 @@ FERIADOS_FIJOS = {
     (1, 5),     # Dia del Trabajador
     (24, 6),    # Batalla de Carabobo
     (5, 7),     # Dia de la Independencia
+    (24, 10),   # Natalicio de Jose Gregorio Hernandez
     (25, 12),   # Navidad
+    (31, 12),   # Fin de ano
 }
 
 # Dias festivos moviles base (se calculan por ano)
@@ -87,6 +90,53 @@ def _parsear_tasa(texto):
     return texto.replace("\n", "").replace(" ", "").replace(".", "").replace(",", ".")
 
 
+MESES = {
+    "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
+    "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
+    "septiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12,
+}
+
+
+def _parsear_fecha_valor(texto):
+    if not texto:
+        return None
+
+    normalizado = texto.lower().replace(",", " ")
+    match = re.search(
+        r"(\d{1,2})\s+(?:de\s+)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+(?:de\s+)?(\d{4})",
+        normalizado,
+    )
+    if match:
+        try:
+            return datetime.date(
+                int(match.group(3)), MESES[match.group(2)], int(match.group(1))
+            )
+        except ValueError:
+            return None
+
+    palabras = [p for p in re.split(r"\s+", normalizado) if p]
+    for i in range(len(palabras) - 2):
+        dia = palabras[i]
+        mes = MESES.get(palabras[i + 1])
+        anio = palabras[i + 2]
+        if mes is None or not dia.isdigit() or not anio.isdigit():
+            continue
+        try:
+            return datetime.date(int(anio), mes, int(dia))
+        except ValueError:
+            return None
+
+    match = re.search(r"(\d{1,2})[/-](\d{1,2})[/-](\d{4})", texto)
+    if match:
+        try:
+            return datetime.date(
+                int(match.group(3)), int(match.group(2)), int(match.group(1))
+            )
+        except ValueError:
+            return None
+    return None
+
+
 def scrape_bcv():
     options = Options()
     options.add_argument("--headless")
@@ -125,7 +175,8 @@ def scrape_bcv():
             sys.exit(1)
 
         captura = _ahora_venezuela()
-        ef = _fecha_efectiva()
+        fecha_valor = _parsear_fecha_valor(fecha_texto)
+        ef = fecha_valor or _fecha_efectiva().date()
         fecha_iso = ef.strftime("%Y-%m-%dT00:00:00")
         captura_iso = captura.isoformat()
 

@@ -4,9 +4,9 @@
 
 | Clase | Atributos | Descripción |
 |-------|-----------|-------------|
-| `TasaBcv` | `usd`, `eur`, `usdt`, `fecha`, `origen` | Modelo de tasa de cambio BCV |
+| `TasaBcv` | `usd`, `eur`, `usdt`, `fecha`, `origen`, `fechaEfectiva` | Modelo de tasa de cambio BCV |
 | `TasaBcv.de(moneda)` | `moneda`: 'USD', 'EUR' o 'USDT' | Retorna la tasa para una moneda |
-| `TasaBcv.fechaEfectiva` | — | Campo: fecha efectiva BCV almacenada (calculada con hora Venezuela UTC-4) |
+| `TasaBcv.fechaEfectiva` | — | Campo almacenado de fecha efectiva BCV; su resolución depende del origen de la tasa |
 | `TasaBcv.actual()` | — | Factory: crea TasaBcv con fechaEfectiva calculada desde hora actual Venezuela (UTC-4) |
 | `TasaBcv.toJson()` / `fromJson()` | — | Serialización JSON |
 
@@ -14,17 +14,24 @@
 
 | Clase/Método | Descripción |
 |-------------|-------------|
-| `BcvApiService.obtenerTasa()` | Consulta API realtime (USD y EUR) |
-| `BcvApiService.obtenerTasaHistorica(fecha)` | Consulta histórico: rango 7 días, tasa más reciente con `fechaEfectiva ≤ fecha` |
+| `BcvApiService.obtenerTasa()` | Consulta API realtime (USD y EUR), normaliza timestamps Rafnix sin zona como UTC y exige una fecha efectiva común |
+| `BcvApiService.obtenerTasaHistorica(fecha)` | Consulta histórico en la ventana `[fecha-30 días, fecha+1 día]`; agrupa USD/EUR por fecha efectiva común y retorna la mayor `fechaEfectiva ≤ fecha` |
+| `BcvApiService.obtenerTasaAnterior(fechaLimite)` | Consulta el histórico y retorna la tasa USD/EUR de la fecha efectiva común inmediatamente anterior a `fechaLimite` |
 | `BcvApiService.obtenerUsdt()` | Consulta USDT vía `/binance/realtime_ves` |
-| `BcvScraperService.obtenerTasa()` | Scraping de `bcv.org.ve`, parsea `#dolar` y `#euro`, extrae "Fecha Valor" del HTML |
-| `BcvCacheService.obtenerTasa()` | Lee la tasa cacheada más reciente de SharedPreferences |
-| `BcvCacheService.obtenerTasaPorFecha(fecha)` | Lee tasa cacheada para una fecha específica |
+| `BcvScraperService.obtenerTasa()` | Scraping de `bcv.org.ve`, parsea `#dolar` y `#euro`; si existe "Fecha Valor", la usa como `fecha` y `fechaEfectiva` autoritativas |
+| `BcvCacheService.obtenerTasa()` | Lee la tasa cacheada más reciente cuya `fechaEfectiva` no es posterior a hoy en Venezuela |
+| `BcvCacheService.obtenerTasaMasRecienteHasta(fechaLimite)` | Retorna la tasa cacheada más reciente con `fechaEfectiva ≤ fechaLimite` |
+| `BcvCacheService.obtenerTasaMasRecienteMenorQue(fechaLimite)` | Retorna la tasa cacheada más reciente con `fechaEfectiva < fechaLimite` |
+| `BcvCacheService.obtenerTasaSiguiente(fechaBase)` | Retorna la tasa futura cacheada más cercana a `fechaBase`, sin convertirla en tasa actual |
+| `BcvCacheService.obtenerTasaPorFecha(fecha)` | Lee tasa cacheada para una fecha efectiva específica |
 | `BcvCacheService.guardarTasa(tasa)` | Guarda tasa en SharedPreferences |
+| `BcvCacheService.obtenerUltimaConsulta()` / `registrarConsulta()` | Lee o registra la hora de la última consulta a la API |
 | `TasaRepository.obtenerTasa()` | Orquestador: cache → refrescarTasa |
-| `TasaRepository.refrescarTasa()` | Fuerza actualización: API → cache → scraper |
-| `TasaRepository.obtenerTasaHistorica(fecha)` | Histórico vía cache → API |
+| `TasaRepository.refrescarTasa()` | Fuerza actualización: API → cache → scraper; una tasa futura nunca se devuelve como actual |
+| `TasaRepository.obtenerTasaHistorica(fecha)` | Histórico: cache exacta → API con mayor fecha efectiva `≤ fecha` → cache previa; conserva la fecha solicitada en la UI |
+| `TasaRepository.obtenerTasaAnterior(fechaLimite)` | Obtiene la tasa de la fecha efectiva inmediatamente anterior, primero desde cache y luego desde API |
 | `TasaRepository.obtenerUsdt()` | USDT vía API |
+| `TasaRepository.obtenerTasaSiguiente()` / `existeTasaSiguiente()` | Consulta si hay una tasa efectiva futura cacheada para mostrarla como siguiente disponible |
 | `SettingsProvider.isDarkMode` | Getter: indica si el modo oscuro está activo |
 | `SettingsProvider.isAutomaticComma` | Getter: indica si el modo de coma automática está activo |
 | `SettingsProvider.toggleDarkMode()` | Método: alterna el modo oscuro y lo persiste |
@@ -35,11 +42,12 @@
 | Propiedad/Método | Descripción |
 |-----------------|-------------|
 | `ConversorViewmodel.entradaController` | `TextEditingController` vinculado al TextField |
-| `ConversorViewmodel.variacion` | `double?` — variación porcentual vs día anterior (solo tasa actual) |
-| `ConversorViewmodel.cargarTasa()` | Obtiene tasa (histórica con fallback a tasa viva si no hay datos) |
+| `ConversorViewmodel.variacion` | `double?` — variación porcentual de la tasa actual o histórica frente a la fecha efectiva inmediatamente anterior; no aplica a USDT |
+| `ConversorViewmodel.fechaEfectivaAplicada` | Fecha efectiva de la tasa que se está mostrando en la tarjeta |
+| `ConversorViewmodel.cargarTasa()` | Obtiene la tasa actual o histórica; conserva la fecha seleccionada aunque se aplique una tasa anterior |
 | `ConversorViewmodel.refrescarTasa()` | Fuerza refresco desde API |
 | `ConversorViewmodel.setMoneda(moneda)` | Cambia moneda (USD/EUR/USDT), carga USDT si aplica |
-| `ConversorViewmodel.seleccionarFecha(fecha)` | Fecha histórica, dispara carga |
+| `ConversorViewmodel.seleccionarFecha(fecha)` | Acepta cualquier fecha disponible en el calendario, incluidos fines de semana y feriados, y dispara la carga histórica |
 | `ConversorViewmodel.volverAHoy()` | Limpia fecha, carga tasa actual |
 | `ConversorViewmodel.setEntrada(valor)` | Actualiza entrada y dispara conversión |
 | `ConversorViewmodel.toggleDireccion()` | Invierte dirección, resultado (2 decimales) → entrada |

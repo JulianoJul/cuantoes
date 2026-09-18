@@ -1,4 +1,13 @@
-Set<int> _feriadosFijos = {1, 19, 24, 5, 25};
+const _feriadosFijos = <({int month, int day})>{
+  (month: 1, day: 1),
+  (month: 4, day: 19),
+  (month: 5, day: 1),
+  (month: 6, day: 24),
+  (month: 7, day: 5),
+  (month: 10, day: 24),
+  (month: 12, day: 25),
+  (month: 12, day: 31),
+};
 
 // Caché en memoria de los feriados obtenidos desde Google Calendar
 Set<String> feriadosGoogleCache = {};
@@ -7,16 +16,13 @@ void setFeriadosGoogle(Set<String> feriados) {
   feriadosGoogleCache = feriados;
 }
 
-int _feriadoMes(int dia) {
-  const meses = <int, int>{
-    1: 1,
-    19: 4,
-    24: 6,
-    5: 7,
-    25: 12,
-  };
-  return meses[dia] ?? 0;
-}
+DateTime _soloFecha(DateTime fecha) =>
+    DateTime(fecha.year, fecha.month, fecha.day);
+
+bool _mismaFecha(DateTime primera, DateTime segunda) =>
+    primera.year == segunda.year &&
+    primera.month == segunda.month &&
+    primera.day == segunda.day;
 
 DateTime _calcularPascua(int year) {
   final a = year % 19;
@@ -36,41 +42,41 @@ DateTime _calcularPascua(int year) {
   return DateTime(year, mes, dia);
 }
 
-DateTime _sumarDias(DateTime dt, int days) => dt.add(Duration(days: days));
+DateTime _sumarDias(DateTime fecha, int days) =>
+    DateTime(fecha.year, fecha.month, fecha.day + days);
 
 bool esFeriadoBancario(DateTime fecha) {
-  final d = fecha.day;
-  final m = fecha.month;
+  final dia = _soloFecha(fecha);
 
   // 1. Verificamos primero la fuente primaria (Google Calendar) si está disponible
   if (feriadosGoogleCache.isNotEmpty) {
     final dateStr =
-        '${fecha.year}${m.toString().padLeft(2, '0')}${d.toString().padLeft(2, '0')}';
+        '${dia.year}${dia.month.toString().padLeft(2, '0')}${dia.day.toString().padLeft(2, '0')}';
     if (feriadosGoogleCache.contains(dateStr)) return true;
   }
 
   // 2. Si no está en Google, usamos la lógica de fallback (fijos + pascua)
-  if (_feriadosFijos.contains(d) && _feriadoMes(d) == m) return true;
+  if (_feriadosFijos.contains((month: dia.month, day: dia.day))) return true;
 
-  final pascua = _calcularPascua(fecha.year);
+  final pascua = _calcularPascua(dia.year);
 
   final carnavalLunes = _sumarDias(pascua, -48);
   final carnavalMartes = _sumarDias(pascua, -47);
   final juevesSanto = _sumarDias(pascua, -3);
   final viernesSanto = _sumarDias(pascua, -2);
 
-  return fecha == carnavalLunes ||
-      fecha == carnavalMartes ||
-      fecha == juevesSanto ||
-      fecha == viernesSanto;
+  return _mismaFecha(dia, carnavalLunes) ||
+      _mismaFecha(dia, carnavalMartes) ||
+      _mismaFecha(dia, juevesSanto) ||
+      _mismaFecha(dia, viernesSanto);
 }
 
 DateTime proximoDiaHabil(DateTime fecha) {
-  var ef = DateTime(fecha.year, fecha.month, fecha.day);
+  var ef = _soloFecha(fecha);
   while (ef.weekday == DateTime.saturday ||
       ef.weekday == DateTime.sunday ||
       esFeriadoBancario(ef)) {
-    ef = ef.add(const Duration(days: 1));
+    ef = _sumarDias(ef, 1);
   }
   return ef;
 }
@@ -86,9 +92,9 @@ DateTime ahoraVenezuela() {
 /// Calcula la fecha efectiva BCV a partir de una fecha/hora de referencia.
 /// Si la hora es ≥ 14, la tasa aplica para el siguiente día hábil.
 DateTime calcularFechaEfectiva(DateTime fecha) {
-  var ef = DateTime(fecha.year, fecha.month, fecha.day);
+  var ef = _soloFecha(fecha);
   if (fecha.hour >= 14) {
-    ef = ef.add(const Duration(days: 1));
+    ef = _sumarDias(ef, 1);
   }
   return proximoDiaHabil(ef);
 }

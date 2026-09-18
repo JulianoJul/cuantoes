@@ -15,20 +15,21 @@ descripción del problema y solución propuesta. Marcados con `[ ]` pendiente, `
   **no se encuentra**, así la app siempre llama a la red aun con cache válido.
   Además, `refrescarTasa()` usa orden API → scraper → cache, pero el orden correcto
   es API → cache → scraper.
-- **Solución**: `obtenerTasa()` debe buscar la clave de cache más reciente (con
-  `_cache.obtenerTasa()` que ya devuelve la mayor lexicográficamente), y validar vigencia
-  con `_esTasaVigente`. Eliminar la búsqueda por `hoy`/`hoy+1` que asume día contiguo.
+- **Solución**: `obtenerTasa()` busca la tasa cacheada más reciente hasta hoy mediante
+  `obtenerTasaMasRecienteHasta(hoy)` y valida vigencia con `_esTasaVigente`. Se eliminó
+  la búsqueda por `hoy`/`hoy+1` que asumía día contiguo.
   En `refrescarTasa()`: API → si falla → cache → si falla → scraper → si falla → rethrow.
 - **Estado**: [x]
 
 ### B2. Histórico no filtra por fechaEfectiva del resultado
 
 - **Archivos**: `lib/services/bcv_api_service.dart`
-- **Bug**: `obtenerTasaHistorica` consulta `[fecha-1, fecha+2]` con `order=desc&limit=1`
-  y devuelve `currencies.first` sin validar que su `fechaEfectiva` coincida con la fecha
-  solicitada. Pedir "miércoles" puede devolver la tasa del "viernes" o "lunes siguiente".
-- **Solución**: Rango ampliado a 7 días, limit=10, iterar resultados en orden DESC
-  y devolver la primera cuya `fechaEfectiva <= fecha` solicitada.
+- **Bug original**: `obtenerTasaHistorica` devolvía la primera fila del histórico sin
+  validar su `fechaEfectiva`, por lo que una consulta podía devolver una tasa posterior
+  a la fecha solicitada.
+- **Solución**: Consulta una ventana de 30 días anteriores hasta el día siguiente,
+  con `limit=1000`, agrupa USD y EUR por fecha efectiva, conserva solo fechas efectivas
+  comunes y devuelve la mayor cuya `fechaEfectiva ≤ fecha` solicitada.
 - **Estado**: [x]
 
 ### B3. fechaEfectiva no maneja feriados bancarios venezolanos
@@ -41,6 +42,8 @@ descripción del problema y solución propuesta. Marcados con `[ ]` pendiente, `
   `bool esFeriadoBancario(DateTime fecha)` basado en una lista de feriados fijos + cálculo
   de móviles (carnaval, semana santa). Usarlo en `fechaEfectiva` para saltar al siguiente
   día hábil. Replicar la misma lista en `scrap_bcv.py`.
+- El selector de fecha no filtra esos días: fines de semana y feriados siguen siendo
+  seleccionables; el salto solo se aplica al cálculo/resolución de la fecha efectiva.
 - **Estado**: [x]
 
 ### B4. Scraper Dart siempre usa DateTime.now() como fecha
@@ -51,8 +54,9 @@ descripción del problema y solución propuesta. Marcados con `[ ]` pendiente, `
   la fecha real de la tasa. Si el BCV publica el viernes y se scrapea el sábado, la
   fechaEfectiva será "lunes próximo" en lugar de "viernes" o "lunes" según corresponda.
 - **Solución**: Extraer la "Fecha Valor" del HTML del BCV (texto tipo
-  "Fecha Valor: Miércoles, 15 Julio 2026") y parsear a `DateTime`. Usar esa fecha como
-  `fecha` del `TasaBcv`. Fallback a `DateTime.now()` si no se encuentra.
+  "Fecha Valor: Miércoles, 15 Julio 2026") y parsear a `DateTime`. Cuando existe, el
+  scraper Dart usa esa fecha como `fecha` y `fechaEfectiva` autoritativas. Si no se
+  encuentra, usa `DateTime.now()` para `fecha` y la fecha efectiva actual como fallback.
 - **Estado**: [x]
 
 ### B5. Race condition en setMoneda con USDT
@@ -129,13 +133,13 @@ descripción del problema y solución propuesta. Marcados con `[ ]` pendiente, `
 - **Solución**: Añadir entradas en `funciones.md` para cada uno.
 - **Estado**: [x]
 
-### D3. DEC-002 miente sobre rango y filtro de histórico
+### D3. DEC-002 quedó desactualizado sobre rango y filtro de histórico
 
 - **Archivos**: `docs/decisiones.md`
-- **Problema**: Dice "rango de 7 días y selecciona la tasa más reciente ≤ fecha solicitada"
-  — el código realmente usa `[fecha-1, fecha+2]` (4 días) y no hay filtro `≤ fecha`.
-- **Solución**: Actualizar DEC-002 o crear DEC-005 describiendo el query ampliado y la
-  futura lógica de filtrado (cuando se arregle B2).
+- **Problema original**: DEC-002 describía un rango y un filtro que no coincidían con la
+  implementación anterior.
+- **Solución**: DEC-002 documenta la ventana actual de 30 días, la fecha efectiva común
+  para USD/EUR y la selección de la mayor fecha efectiva `≤` la solicitada.
 - **Estado**: [x]
 
 ### D4. No hay ADR para USDT
@@ -213,20 +217,20 @@ descripción del problema y solución propuesta. Marcados con `[ ]` pendiente, `
 
 ## Mejoras funcionales (prioridad baja)
 
-### M1. fechaHoraValorBcv en el modelo
+### M1. Fecha Valor como fecha efectiva del scraper
 
-- **Archivos**: `lib/models/tasa_bcv.dart`
-- **Mejora**: Añadir campo `DateTime? fechaValorBcv` opcional para preservar la fecha real
-  publicada por el BCV (no la derivada por `fechaEfectiva`). Útil cuando el scraper extrae
-  "Fecha Valor: Miércoles, 15 Julio 2026" del HTML.
+- **Archivos**: `lib/services/bcv_scraper_service.dart`, `lib/models/tasa_bcv.dart`
+- **Implementación**: `BcvScraperService` extrae "Fecha Valor" y, cuando es válida, la usa
+  directamente como `fecha` y `fechaEfectiva` de `TasaBcv`. No existe un campo separado
+  `fechaValorBcv` en el modelo; el script Python conserva el texto en `fecha_valor_bcv`.
 - **Estado**: [x]
 
 ### M2. Vista de variación porcentual
 
 - **Archivos**: `lib/viewmodels/conversor_viewmodel.dart`, `lib/screens/conversor_screen.dart`
-- **Mejora**: Mostrar "▲ +0.61%" o "▼ -0.20%" junto a la tasa actual, comparando con la
-  tasa del día anterior (cargada vía `obtenerTasaHistorica(hoy-1)` o cache del día previo).
-  Solo para vista de hoy/mañana.
+- **Mejora**: Mostrar "▲ +0.61%" o "▼ -0.20%" junto a la tasa actual o histórica,
+  comparando con la tasa de la fecha efectiva inmediatamente anterior mediante
+  `obtenerTasaAnterior`. No aplica a USDT.
 - **Estado**: [x]
 
 ### M3. Calendario resalta fechas con cache disponible
@@ -266,5 +270,20 @@ descripción del problema y solución propuesta. Marcados con `[ ]` pendiente, `
 - Pendientes: **0**
 
 ### Features adicionales implementadas
-- **F1**: Fallback automático a fecha anterior en selector histórico (DEC-007)
-- **F2**: Variación porcentual vs día anterior (DEC-008)
+- **F1**: Resolución de una fecha seleccionada a la mayor tasa efectiva `≤` esa fecha,
+  sin cambiar visualmente la fecha elegida; la tarjeta muestra la fecha aplicada (DEC-007)
+- **F2**: Variación porcentual para tasas actuales e históricas frente a la fecha efectiva
+  inmediatamente anterior (DEC-008)
+
+## Invariantes actuales
+- El calendario permite seleccionar fines de semana y feriados.
+- La fecha seleccionada se conserva visualmente; la tasa se resuelve con la mayor
+  `fechaEfectiva ≤` la fecha solicitada y la tarjeta muestra la fecha efectiva aplicada.
+- La variación se calcula para USD/EUR actuales e históricos usando la tasa efectiva
+  inmediatamente anterior; no se calcula para USDT.
+- La consulta de tasa actual en cache excluye `fechaEfectiva` futuras; esas entradas no
+  pueden devolverse como tasa actual.
+- Los timestamps Rafnix sin zona horaria se interpretan como UTC y se convierten a
+  Venezuela (UTC-4) antes del corte de las 14:00.
+- El scraper Dart trata "Fecha Valor" como autoritativa cuando está presente.
+- El histórico consulta USD y EUR con una fecha efectiva común.

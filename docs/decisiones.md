@@ -6,8 +6,13 @@
 - **Contexto y Causa:** App para tasa de cambio USD/EUR↔VES del BCV. Necesita funcionar incluso sin conexión o si una fuente falla.
 - **Decisión:** Tres capas de obtención de datos:
   1. API REST: `dolar-vzla.rafnixg.dev/api/v1/bcv/realtime` (principal)
-  2. Scraping directo de `bcv.org.ve` usando `http` + `html` (fallback)
-  3. Cache con `shared_preferences` (última tasa guardada)
+  2. Cache con `shared_preferences` (tasas por fecha efectiva)
+  3. Scraping directo de `bcv.org.ve` usando `http` + `html` (fallback)
+  - `obtenerTasa()` intenta primero una tasa cacheada cuya `fechaEfectiva` no sea
+    posterior a hoy en Venezuela.
+  - `refrescarTasa()` fuerza el orden API → cache → scraper.
+  - Una entrada futura puede conservarse para mostrar la próxima tasa disponible,
+    pero nunca se devuelve como tasa actual.
 - **Alternativas evaluadas:**
   - Solo API — descartado: dependencia de terceros
   - Solo scraping — descartado: frágil si el BCV cambia el HTML
@@ -22,10 +27,11 @@
 - **Contexto y Causa:** Se requería conversión no solo de USD sino también EUR, y poder consultar tasas de días anteriores.
 - **Decisión:**
   - Selector de moneda (USD/EUR) con ChoiceChips
-  - DatePicker para seleccionar fecha histórica
-  - `BcvApiService.obtenerTasaHistorica(fecha)` consulta `/api/v1/history/bcv` con rango de 7 días (`[fecha-7, fecha+3]`, limit=10, order=desc) y selecciona la primera tasa cuya `fechaEfectiva ≤ fecha` solicitada (maneja fines de semana y feriados)
+  - DatePicker para seleccionar fecha histórica; no bloquea fines de semana ni feriados
+  - `BcvApiService.obtenerTasaHistorica(fecha)` consulta `/api/v1/history/bcv` para USD y EUR en la ventana `[fecha-30 días, fecha+1 día]` (`limit=1000`, `order=desc`), agrupa por `fechaEfectiva` y selecciona la mayor fecha efectiva común cuya `fechaEfectiva ≤ fecha` solicitada
+  - La tasa histórica de USD y EUR siempre proviene de una misma fecha efectiva común
   - `flutter_localizations` para calendario en español
-- **Impacto:** ViewModel gana `_moneda` y `_fechaSeleccionada`. UI agrega tabs y selector de fecha.
+- **Impacto:** ViewModel gana `_moneda` y `_fechaSeleccionada`. UI agrega tabs y selector de fecha. La fecha elegida permanece visible; la tarjeta muestra por separado la `fechaEfectiva` aplicada.
 
 ---
 
@@ -67,22 +73,22 @@
 - **Decisión:**
   - Script `scrap_bcv.py` con Selenium + Firefox headless para scraping JS-rendered
   - Misma lógica de `fechaEfectiva` (≥14h + salto findes/feriados)
-  - Extrae "Fecha Valor" del HTML renderizado
-  - Output JSON compatible con el modelo Dart
-  - No integrado en el pipeline de Flutter; se ejecuta manualmente o vía script externo
+  - El scraper Dart integrado da prioridad a "Fecha Valor" del HTML: cuando está presente, fija `fecha` y `fechaEfectiva`; si no aparece, usa la fecha efectiva actual
+  - `scrap_bcv.py` conserva el texto encontrado en `fecha_valor_bcv` y produce un JSON compatible para uso externo; no está integrado en el pipeline Flutter
 - **Impacto:** Archivo `scrap_bcv.py` en raíz. Documentado en docs como alternativa.
 
 ---
 
-## DEC-007: Fallback a fecha anterior en selector histórico
+## DEC-007: Fecha seleccionada y fecha efectiva aplicada
 
 - **Origen:** `[Solicitud del usuario tras probar la app]`
-- **Contexto y Causa:** El usuario seleccionaba una fecha (ej: 14/07) y la API/cache no tenían datos para ese día exacto, mostrando error. El usuario pedía que el calendario muestre automáticamente la fecha anterior con datos disponibles.
+- **Contexto y Causa:** Una fecha seleccionada puede ser fin de semana, feriado o no tener una entrada exacta, aunque sí exista una tasa efectiva anterior aplicable.
 - **Decisión:**
-  - `cargarTasa()` con `_fechaSeleccionada`: primero intenta `obtenerTasaHistorica`; si falla (null), hace fallback a `obtenerTasa()` (tasa viva) sin requerir match exacto de fecha
-  - Si la `fechaEfectiva` de la tasa obtenida es anterior a la seleccionada por el usuario, `_fechaSeleccionada` se actualiza a esa fecha, reflejando en el calendario los datos reales
-  - No se actualiza si la fecha efectiva es igual o posterior (evita mostrar "Mañana" cuando el usuario seleccionó "Hoy")
-- **Impacto:** Simplifica `cargarTasa()` eliminando la comparación `sel == ef`. El selector de fecha siempre muestra la fecha de los datos que se están visualizando.
+  - `cargarTasa()` con `_fechaSeleccionada` conserva la fecha elegida, incluidos fines de semana y feriados.
+  - `TasaRepository.obtenerTasaHistorica()` busca primero cache exacta, luego la mayor `fechaEfectiva ≤ fecha` solicitada mediante API y finalmente la tasa cacheada anterior disponible.
+  - Si la tasa aplicada es anterior a la fecha solicitada, `_fechaSeleccionada` no se reemplaza.
+  - `fechaEfectivaAplicada` expone la fecha real de la tasa mostrada y la tarjeta la presenta como "Tasa aplicada".
+- **Impacto:** El calendario refleja la intención del usuario y la tarjeta distingue fecha solicitada de fecha efectiva aplicada. Si no existe una tasa elegible, se muestra error en vez de sustituirla por la tasa viva.
 
 ---
 
@@ -91,28 +97,29 @@
 - **Origen:** `[Solicitud del usuario]`
 - **Contexto y Causa:** No había indicación visual de si la tasa subió o bajó respecto al día anterior.
 - **Decisión:**
-  - `ConversorViewmodel.variacion` (`double?`): se calcula al cargar/refrescar tasa actual
-  - `_calcularVariacion()`: obtiene tasa del día anterior vía `obtenerTasaHistorica(hoy-1)`, calcula `((actual - anterior) / anterior) * 100`
-  - Solo se calcula para tasa actual (sin fecha seleccionada), no para USDT
+  - `ConversorViewmodel.variacion` (`double?`): se calcula al cargar/refrescar una tasa actual o histórica
+  - `_calcularVariacion()`: obtiene `obtenerTasaAnterior(actual.fechaEfectiva)`, que resuelve la fecha efectiva inmediatamente anterior, y calcula `((actual - anterior) / anterior) * 100`
+  - Funciona para USD y EUR tanto con fecha seleccionada como sin ella; no se calcula para USDT
   - No bloquea la UI si falla (variación queda null)
-- **Impacto:** Nueva propiedad `variacion` en ViewModel. UI muestra ▲/▼ + porcentaje en la línea de tasa correspondiente.
+- **Impacto:** Nueva propiedad `variacion` en ViewModel. UI muestra ▲/▼ + porcentaje en la línea de la moneda correspondiente.
 
 ---
 
 ## DEC-009: fechaEfectiva como campo almacenado con timezone Venezuela
 
 - **Origen:** `[Bug reportado por usuario]`
-- **Contexto y Causa:** La API realtime (`dolar-vzla.rafnixg.dev`) devuelve el timestamp del servidor (UTC), no la hora de publicación del BCV. El getter `fechaEfectiva` usaba `fecha.hour >= 14` con ese timestamp UTC, causando que a mediodía en Venezuela (16:XX UTC) la app mostrara la tasa del día siguiente (que aún no existía).
+- **Contexto y Causa:** La API realtime (`dolar-vzla.rafnixg.dev`) devuelve timestamps del proveedor que pueden no incluir zona horaria. Interpretar sus componentes sin zona como hora local del dispositivo desplaza el corte de las 14:00 en Venezuela.
 - **Decisión:**
-  - `fechaEfectiva` pasa de getter computado a campo `final DateTime` almacenado
-  - Se calcula una sola vez al crear el modelo, usando `DateTime.now().toUtc() - 4h` (hora Venezuela, sin DST)
-  - Factory `TasaBcv.actual()` para tasas en tiempo real (usa hora VE)
-  - `calcularFechaEfectiva(fecha)` para tasas históricas (usa la fecha del registro)
+  - `fechaEfectiva` es un campo `final DateTime` almacenado; los servicios y factories le entregan el valor normalizado sin recalcularlo mediante un getter.
+  - Factory `TasaBcv.actual()` para tasas basadas en la hora actual (usa hora VE)
+  - `calcularFechaEfectiva(fecha)` para fechas de referencia que requieren aplicar el corte y el siguiente día hábil
+  - En `BcvApiService`, los timestamps Rafnix sin zona se interpretan como componentes UTC; luego se convierten a Venezuela (UTC-4) antes de aplicar el corte de las 14:00. Los timestamps con zona también se normalizan a UTC antes de esa conversión.
+  - USD y EUR realtime deben resolver a la misma `fechaEfectiva`; si no, la respuesta se rechaza.
   - `fromJson` con retrocompatibilidad: si no hay `fecha_efectiva` en JSON, se computa desde `fecha`
   - `_esTasaVigente` en `TasaRepository` también usa `ahoraVenezuela()`
 - **Alternativas evaluadas:**
   - Clamp del getter con `DateTime.now()` — descartado: getter impuro, dificulta testing
-  - Parsear timezone del servidor API — descartado: frágil, la API no documenta su timezone
+  - Interpretar timestamps sin zona con la zona del dispositivo — descartado: el contrato de Rafnix los trata como UTC
 - **Impacto:** `TasaBcv` gana campo `fechaEfectiva` y factory `.actual()`. `feriados_ve.dart` gana 3 funciones (`ahoraVenezuela`, `calcularFechaEfectiva`, `fechaEfectivaActual`). Cache persiste `fecha_efectiva` en JSON. Retrocompatible con cache antiguo.
 
 ---
@@ -138,7 +145,8 @@
 - **Origen:** `[Bug reportado por usuario]`
 - **Contexto y Causa:** Si el BCV se retrasa en actualizar la tasa después de las 2:00 PM, la regla general de `hora >= 14 -> próximo día hábil` provocaba que la app mostrara que la tasa (aún no actualizada) pertenecía a "mañana".
 - **Decisión:**
-  - En `TasaRepository.refrescarTasa()`, después de obtener la nueva tasa (ya sea por API o scraping), se compara su valor en dólares (`usd`) con el valor de la última tasa almacenada en caché.
-  - Si la diferencia es menor a `0.00001` (es decir, el BCV no ha actualizado el valor), se descarta el avance de fecha y se conserva la `fechaEfectiva` de la tasa en caché.
+  - En `TasaRepository.refrescarTasa()`, después de obtener la nueva tasa (ya sea por API o scraping), se comparan sus valores USD y EUR con los de la última tasa almacenada en caché.
+  - Si ambas diferencias son menores a `0.00001` (es decir, el BCV no ha actualizado los valores), se descarta el avance de fecha y se conserva la `fechaEfectiva` de la tasa en caché.
   - Se implementó esto en un método interno `_aplicarHeuristicaFecha(TasaBcv nuevaTasa)`.
-- **Impacto:** La fecha mostrada en la UI se mantiene fiel a la realidad incluso si hay retrasos en la publicación del BCV por la tarde.
+  - La búsqueda de tasa actual solo considera entradas con `fechaEfectiva ≤ hoy` en Venezuela. Las entradas futuras se conservan para `obtenerTasaSiguiente()`, pero `_tasaActualPostRefresh()` nunca las devuelve como actuales.
+- **Impacto:** La fecha mostrada en la UI se mantiene fiel a la realidad incluso si hay retrasos en la publicación del BCV por la tarde o si la API entrega anticipadamente una tasa futura.
