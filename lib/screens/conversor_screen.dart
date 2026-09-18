@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
+import 'camera_capture_screen.dart';
 import '../viewmodels/conversor_viewmodel.dart';
 import '../services/settings_provider.dart';
+import '../services/ocr_service.dart';
 import '../utils/automatic_comma_formatter.dart';
 import '../utils/feriados_ve.dart';
+import '../utils/numeros_ocr.dart';
 
 class ConversorScreen extends StatelessWidget {
   const ConversorScreen({super.key});
@@ -52,7 +56,7 @@ class _ConversorBody extends StatelessWidget {
               const SizedBox(height: 8),
               _buildSelectorFecha(context, vm, dateFormatter),
               const SizedBox(height: 20),
-              _buildEntrada(vm, settings),
+              _buildEntrada(context, vm, settings),
               const SizedBox(height: 20),
               _buildSwapButton(vm),
               const SizedBox(height: 20),
@@ -243,7 +247,11 @@ class _ConversorBody extends StatelessWidget {
     }
   }
 
-  Widget _buildEntrada(ConversorViewmodel vm, SettingsProvider settings) {
+  Widget _buildEntrada(
+    BuildContext context,
+    ConversorViewmodel vm,
+    SettingsProvider settings,
+  ) {
     return IgnorePointer(
       ignoring: vm.entradaBloqueada,
       child: Opacity(
@@ -269,10 +277,100 @@ class _ConversorBody extends StatelessWidget {
           decoration: InputDecoration(
             labelText: vm.cargandoUsdt ? 'Cargando USDT...' : vm.labelOrigen,
             border: const OutlineInputBorder(),
+            suffixIcon: IconButton(
+              tooltip: 'Escanear precio',
+              icon: const Icon(Icons.document_scanner_outlined),
+              onPressed: () => _escanearPrecio(context, vm),
+            ),
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _escanearPrecio(
+    BuildContext context,
+    ConversorViewmodel vm,
+  ) async {
+    final origen = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Tomar foto'),
+              onTap: () => Navigator.pop(context, 'camara'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Elegir de galería'),
+              onTap: () => Navigator.pop(context, 'galeria'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (origen == null || !context.mounted) return;
+
+    String? ruta;
+    if (origen == 'camara') {
+      ruta = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(builder: (_) => const CameraCaptureScreen()),
+      );
+    } else {
+      try {
+        final imagen = await ImagePicker().pickImage(
+          source: ImageSource.gallery,
+          imageQuality: 90,
+        );
+        ruta = imagen?.path;
+      } catch (_) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No se pudo abrir la galería')),
+          );
+        }
+        return;
+      }
+    }
+    if (ruta == null || !context.mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    String texto;
+    try {
+      texto = await OcrService().reconocerTexto(ruta);
+    } catch (_) {
+      texto = '';
+    } finally {
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
+    if (!context.mounted) return;
+
+    if (texto.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se detectó texto en la imagen')),
+      );
+      return;
+    }
+
+    final seleccionado = await showDialog<String>(
+      context: context,
+      builder: (_) => _OcrDialog(texto: texto, numeros: extraerNumeros(texto)),
+    );
+    if (seleccionado == null) return;
+
+    vm.entradaController.text = seleccionado;
+    vm.setEntrada(seleccionado);
   }
 
   Widget _buildSwapButton(ConversorViewmodel vm) {
@@ -514,4 +612,116 @@ class _ConversorBody extends StatelessWidget {
 
   bool _esMismaFecha(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+class _OcrDialog extends StatefulWidget {
+  final String texto;
+  final List<NumeroDetectado> numeros;
+
+  const _OcrDialog({required this.texto, required this.numeros});
+
+  @override
+  State<_OcrDialog> createState() => _OcrDialogState();
+}
+
+class _OcrDialogState extends State<_OcrDialog> {
+  late final TextEditingController _controller;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.texto);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _usarSeleccion() {
+    final seleccion = _controller.selection;
+    final texto = seleccion.isValid && !seleccion.isCollapsed
+        ? _controller.text.substring(seleccion.start, seleccion.end)
+        : _controller.text;
+    final valor = parsearNumero(texto);
+    if (valor == null) {
+      setState(() => _error = 'Selecciona un número válido del texto');
+      return;
+    }
+    Navigator.pop(context, _formatoEntrada(valor));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Texto detectado'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _controller,
+                readOnly: true,
+                maxLines: 6,
+                minLines: 3,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  hintText: 'Mantén presionado para seleccionar el número',
+                ),
+              ),
+              if (widget.numeros.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Números detectados',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final numero in widget.numeros.take(12))
+                      ActionChip(
+                        label: Text(numero.texto),
+                        onPressed: () => Navigator.pop(
+                          context,
+                          _formatoEntrada(numero.valor),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _error!,
+                  style: const TextStyle(color: Colors.red, fontSize: 12),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _usarSeleccion,
+          child: const Text('Usar selección'),
+        ),
+      ],
+    );
+  }
+}
+
+String _formatoEntrada(double valor) {
+  final texto = valor.toStringAsFixed(4).replaceFirst(RegExp(r'\.?0+$'), '');
+  return texto.replaceAll('.', ',');
 }

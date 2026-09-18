@@ -26,6 +26,7 @@
 | `BcvCacheService.obtenerTasaPorFecha(fecha)` | Lee tasa cacheada para una fecha efectiva específica |
 | `BcvCacheService.guardarTasa(tasa)` | Guarda tasa en SharedPreferences |
 | `BcvCacheService.obtenerUltimaConsulta()` / `registrarConsulta()` | Lee o registra la hora de la última consulta a la API |
+| `OcrService.reconocerTexto(rutaImagen)` | Reconoce texto de una imagen con ML Kit (script Latin, on-device) |
 | `TasaRepository.obtenerTasa()` | Orquestador: cache → refrescarTasa |
 | `TasaRepository.refrescarTasa()` | Fuerza actualización: API → cache → scraper; una tasa futura nunca se devuelve como actual |
 | `TasaRepository.obtenerTasaHistorica(fecha)` | Histórico: cache exacta → API con mayor fecha efectiva `≤ fecha` → devuelve la mayor fecha efectiva entre la API y la cache previa; conserva la fecha solicitada en la UI |
@@ -66,6 +67,8 @@
 | `calcularFechaEfectiva(fecha)` | Calcula fecha efectiva BCV: hora ≥ 14 → +1 día → próximo día hábil |
 | `fechaEfectivaActual()` | Fecha efectiva actual según hora Venezuela (UTC-4) |
 | `AutomaticCommaFormatter` | Formateador de texto que desplaza decimales al escribir (ej: 15 -> 0,15) si está activo |
+| `extraerNumeros(texto)` | Extrae números de un texto OCR sin repetidos, con su token original |
+| `parsearNumero(token)` | Parsea un token numérico en formato venezolano o inglés (`1.234,56`, `848,5458`, `10.50`) |
 
 ## Enums
 

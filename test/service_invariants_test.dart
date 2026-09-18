@@ -49,7 +49,7 @@ void main() {
       final cache = BcvCacheService();
       final hoy = _hoyVenezuela();
       final actual = _tasa(hoy, 100, 110);
-      final futura = _tasa(hoy.add(const Duration(days: 1)), 200, 220);
+      final futura = _tasa(proximoDiaHabil(hoy.add(const Duration(days: 1))), 200, 220);
       await cache.guardarTasa(actual);
       await cache.guardarTasa(futura);
 
@@ -73,7 +73,7 @@ void main() {
       final cache = BcvCacheService();
       final hoy = _hoyVenezuela();
       final actual = _tasa(hoy, 100, 110);
-      final futura = _tasa(hoy.add(const Duration(days: 1)), 200, 220);
+      final futura = _tasa(proximoDiaHabil(hoy.add(const Duration(days: 1))), 200, 220);
       await cache.guardarTasa(actual);
 
       final api = _FakeApi()..realtime = futura;
@@ -101,7 +101,7 @@ void main() {
       final cache = BcvCacheService();
       final hoy = _hoyVenezuela();
       final actual = _tasa(hoy, 100, 110);
-      final futura = _tasa(hoy.add(const Duration(days: 1)), 200, 220);
+      final futura = _tasa(proximoDiaHabil(hoy.add(const Duration(days: 1))), 200, 220);
 
       final api = _FakeApi()
         ..realtime = futura

@@ -173,3 +173,16 @@
   - `obtenerTasaHistorica()` y `obtenerTasaAnterior()` comparan el resultado de la API con la tasa cacheada más reciente anterior al límite y devuelven la de mayor `fechaEfectiva`.
   - Si la API falla, se usa la cache previa (antes `obtenerTasaAnterior()` devolvía `null` en ese caso).
 - **Impacto:** "Tasa aplicada" y la variación porcentual usan la fecha efectiva más cercana disponible, sin importar la fuente.
+
+---
+
+## DEC-014: Escaneo de precios por OCR
+
+- **Origen:** `[Solicitud del usuario]`
+- **Contexto y Causa:** Se quería poder tomar una foto o captura de un precio y usarlo en el conversor sin escribirlo a mano.
+- **Decisión:**
+  - `google_mlkit_text_recognition` (modelo Latin, on-device y offline) para reconocer texto, más `image_picker` para cámara/galería.
+  - `utils/numeros_ocr.dart` extrae los números del texto con `extraerNumeros()` y los normaliza con `parsearNumero()` (formatos `1.234,56`, `848,5458`, `10.50`).
+  - La UI muestra un botón de escaneo en el campo de entrada, un selector cámara/galería y un diálogo con los números detectados; al elegir uno se llena la entrada y se convierte.
+  - R8 requiere `-dontwarn` para los modelos de otros idiomas en `android/app/proguard-rules.pro`.
+- **Impacto:** El APK universal crece ~32 MB por el modelo OCR; conviene usar `flutter build apk --split-per-abi` para distribuir.
