@@ -144,17 +144,26 @@ class TasaRepository {
     final cacheExacta = await _cache.obtenerTasaPorFecha(ef);
     if (cacheExacta != null) return cacheExacta;
 
+    TasaBcv? desdeApi;
     try {
       final tasa = await _api.obtenerTasaHistorica(fecha);
       if (tasa != null && !_dia(tasa.fechaEfectiva).isAfter(ef)) {
         await _cache.guardarTasa(tasa);
-        return tasa;
+        desdeApi = tasa;
       }
     } catch (_) {
       // If the historical API is unavailable, use only a prior cached rate.
     }
 
-    return _cache.obtenerTasaMasRecienteMenorQue(ef);
+    // La API puede no tener la fecha efectiva más cercana (histórico
+    // incompleto); la caché de tiempo real suele estar más completa.
+    final cachePrevia = await _cache.obtenerTasaMasRecienteMenorQue(ef);
+    if (desdeApi == null) return cachePrevia;
+    if (cachePrevia == null) return desdeApi;
+
+    return _dia(desdeApi.fechaEfectiva).isBefore(_dia(cachePrevia.fechaEfectiva))
+        ? cachePrevia
+        : desdeApi;
   }
 
   Future<TasaBcv?> obtenerTasaAnterior(DateTime fechaLimite) async {
@@ -163,17 +172,24 @@ class TasaRepository {
     final cacheAnterior = await _cache.obtenerTasaPorFecha(fechaAnterior);
     if (cacheAnterior != null) return cacheAnterior;
 
+    TasaBcv? desdeApi;
     try {
       final tasa = await _api.obtenerTasaAnterior(fechaLimite);
       if (tasa != null && _dia(tasa.fechaEfectiva).isBefore(limite)) {
         await _cache.guardarTasa(tasa);
-        return tasa;
+        desdeApi = tasa;
       }
     } catch (_) {
-      // Do not substitute an arbitrarily old cached rate for the previous one.
+      // Si la API falla, usamos la tasa cacheada más cercana anterior.
     }
 
-    return null;
+    final cachePrevia = await _cache.obtenerTasaMasRecienteMenorQue(limite);
+    if (desdeApi == null) return cachePrevia;
+    if (cachePrevia == null) return desdeApi;
+
+    return _dia(desdeApi.fechaEfectiva).isBefore(_dia(cachePrevia.fechaEfectiva))
+        ? cachePrevia
+        : desdeApi;
   }
 
   Future<double?> obtenerUsdt() async {

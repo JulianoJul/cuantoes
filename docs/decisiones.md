@@ -162,3 +162,14 @@
   - `ConversorViewmodel.fechaMaximaSeleccionable` devuelve esa fecha si es futura, o hoy en Venezuela en caso contrario.
   - `_abrirCalendario` usa `fechaMaximaSeleccionable` como `lastDate` del DatePicker.
 - **Impacto:** No se pueden elegir fechas posteriores a la próxima tasa publicada; los fines de semana y feriados ya transcurridos siguen seleccionables.
+
+---
+
+## DEC-013: Histórico combina API y caché por fecha efectiva más cercana
+
+- **Origen:** `[Bug reportado por usuario]`
+- **Contexto y Causa:** El histórico de la API puede estar incompleto (por ejemplo, USD sin datos del 10 y 11 mientras EUR sí los tiene). `obtenerTasaHistorica()` devolvía el resultado de la API aunque la caché de tiempo real tuviera una fecha efectiva más cercana a la solicitada; al elegir el 11 se aplicaba el 9 en vez del 10.
+- **Decisión:**
+  - `obtenerTasaHistorica()` y `obtenerTasaAnterior()` comparan el resultado de la API con la tasa cacheada más reciente anterior al límite y devuelven la de mayor `fechaEfectiva`.
+  - Si la API falla, se usa la cache previa (antes `obtenerTasaAnterior()` devolvía `null` en ese caso).
+- **Impacto:** "Tasa aplicada" y la variación porcentual usan la fecha efectiva más cercana disponible, sin importar la fuente.

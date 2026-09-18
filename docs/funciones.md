@@ -28,8 +28,8 @@
 | `BcvCacheService.obtenerUltimaConsulta()` / `registrarConsulta()` | Lee o registra la hora de la última consulta a la API |
 | `TasaRepository.obtenerTasa()` | Orquestador: cache → refrescarTasa |
 | `TasaRepository.refrescarTasa()` | Fuerza actualización: API → cache → scraper; una tasa futura nunca se devuelve como actual |
-| `TasaRepository.obtenerTasaHistorica(fecha)` | Histórico: cache exacta → API con mayor fecha efectiva `≤ fecha` → cache previa; conserva la fecha solicitada en la UI |
-| `TasaRepository.obtenerTasaAnterior(fechaLimite)` | Obtiene la tasa de la fecha efectiva inmediatamente anterior, primero desde cache y luego desde API |
+| `TasaRepository.obtenerTasaHistorica(fecha)` | Histórico: cache exacta → API con mayor fecha efectiva `≤ fecha` → devuelve la mayor fecha efectiva entre la API y la cache previa; conserva la fecha solicitada en la UI |
+| `TasaRepository.obtenerTasaAnterior(fechaLimite)` | Obtiene la tasa de la fecha efectiva inmediatamente anterior: cache exacta → API → mayor fecha efectiva entre la API y la cache previa |
 | `TasaRepository.obtenerUsdt()` | USDT vía API |
 | `TasaRepository.obtenerTasaSiguiente()` / `existeTasaSiguiente()` | Consulta si hay una tasa efectiva futura cacheada para mostrarla como siguiente disponible |
 | `SettingsProvider.isDarkMode` | Getter: indica si el modo oscuro está activo |

@@ -56,9 +56,13 @@ Usuario → ConversorViewmodel.seleccionarFecha()
              ├── TasaRepository.obtenerTasaHistorica()
              │       ├── cache exacta por fecha efectiva? → retorna
              │       ├── API USD/EUR (ventana 30d, fecha efectiva común ≤ solicitada) → guarda cache
-             │       └── cache previa disponible → retorna
+             │       └── se devuelve la mayor fecha efectiva ≤ solicitada entre la API y la cache previa
              └── _fechaSeleccionada conserva la fecha elegida
 ```
+
+El histórico de la API puede estar incompleto (p. ej. USD sin datos de algunos
+días), por lo que la caché de tiempo real se usa como fuente complementaria y
+gana la fecha efectiva más cercana a la solicitada.
 
 El calendario permite seleccionar fines de semana y feriados. La tasa aplicada
 es la de mayor `fechaEfectiva ≤` la fecha solicitada; la tarjeta muestra esa

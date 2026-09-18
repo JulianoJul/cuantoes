@@ -157,6 +157,54 @@ void main() {
     expect(result, isNull);
   });
 
+  test(
+    'historical lookup prefers a closer cached rate over a sparse API result',
+    () async {
+      final cache = BcvCacheService();
+      final jueves = DateTime(2026, 9, 10);
+      final cacheada = _tasa(jueves, 100, 110);
+      await cache.guardarTasa(cacheada);
+
+      final api = _FakeApi()..historical = _tasa(DateTime(2026, 9, 9), 90, 99);
+      final repository = TasaRepository(
+        api: api,
+        scraper: _FakeScraper(),
+        cache: cache,
+      );
+
+      final result = await repository.obtenerTasaHistorica(
+        DateTime(2026, 9, 11),
+      );
+
+      expect(result?.usd, cacheada.usd);
+      expect(_dia(result!.fechaEfectiva), jueves);
+    },
+  );
+
+  test(
+    'previous lookup prefers a closer cached rate over a sparse API result',
+    () async {
+      final cache = BcvCacheService();
+      final viernes = DateTime(2026, 9, 11);
+      final cacheada = _tasa(viernes, 100, 110);
+      await cache.guardarTasa(cacheada);
+
+      final api = _FakeApi()..previous = _tasa(DateTime(2026, 9, 9), 90, 99);
+      final repository = TasaRepository(
+        api: api,
+        scraper: _FakeScraper(),
+        cache: cache,
+      );
+
+      final result = await repository.obtenerTasaAnterior(
+        DateTime(2026, 9, 15),
+      );
+
+      expect(result?.usd, cacheada.usd);
+      expect(_dia(result!.fechaEfectiva), viernes);
+    },
+  );
+
   test('previous lookup uses cache first and falls back to API', () async {
     final limite = DateTime(2026, 9, 8);
     final previous = _tasa(DateTime(2026, 9, 4), 100, 110);
