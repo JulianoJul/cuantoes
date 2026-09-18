@@ -64,6 +64,10 @@ El calendario permite seleccionar fines de semana y feriados. La tasa aplicada
 es la de mayor `fechaEfectiva ≤` la fecha solicitada; la tarjeta muestra esa
 fecha como `Tasa aplicada` sin cambiar visualmente la fecha seleccionada.
 
+Las fechas futuras solo se habilitan hasta la fecha efectiva de la próxima tasa
+ya publicada (hoy si aún no existe), de modo que "mañana" no puede elegirse
+antes de que aparezca su tasa.
+
 ### Variación porcentual
 - `ConversorViewmodel._calcularVariacion()`: compara la tasa actual o histórica con la tasa de la fecha efectiva inmediatamente anterior
 - `TasaRepository.obtenerTasaAnterior()` resuelve esa tasa previa desde cache o API

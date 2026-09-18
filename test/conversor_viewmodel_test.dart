@@ -3,13 +3,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:cuantoes/models/tasa_bcv.dart';
 import 'package:cuantoes/services/tasa_repository.dart';
+import 'package:cuantoes/utils/feriados_ve.dart';
 import 'package:cuantoes/viewmodels/conversor_viewmodel.dart';
 
 class _FakeTasaRepository extends TasaRepository {
   TasaBcv? historica;
   TasaBcv? anterior;
   TasaBcv? actual;
-  bool siguienteDisponible = false;
+  TasaBcv? siguiente;
   int obtenerTasaCalls = 0;
   int refrescarTasaCalls = 0;
   int obtenerTasaHistoricaCalls = 0;
@@ -40,7 +41,7 @@ class _FakeTasaRepository extends TasaRepository {
   }
 
   @override
-  Future<bool> existeTasaSiguiente() async => siguienteDisponible;
+  Future<TasaBcv?> obtenerTasaSiguiente() async => siguiente;
 }
 
 TasaBcv _tasa({
@@ -56,6 +57,11 @@ TasaBcv _tasa({
     origen: 'test',
     fechaEfectiva: efectiva,
   );
+}
+
+DateTime _hoyVenezuela() {
+  final ahora = ahoraVenezuela();
+  return DateTime(ahora.year, ahora.month, ahora.day);
 }
 
 void main() {
@@ -131,4 +137,34 @@ void main() {
       expect(vm.fechaSeleccionada, DateTime(2026, 9, 6));
     },
   );
+
+  test('sin tasa siguiente el calendario solo llega hasta hoy', () async {
+    final hoy = _hoyVenezuela();
+    final repository = _FakeTasaRepository()
+      ..actual = _tasa(usd: 100, eur: 200, efectiva: hoy);
+    final vm = ConversorViewmodel(repository: repository);
+    addTearDown(vm.dispose);
+
+    await vm.cargarTasa();
+
+    expect(vm.fechaTasaSiguiente, isNull);
+    expect(vm.tasaSiguienteDisponible, isFalse);
+    expect(vm.fechaMaximaSeleccionable, hoy);
+  });
+
+  test('con tasa siguiente el calendario llega hasta esa fecha', () async {
+    final hoy = _hoyVenezuela();
+    final manana = hoy.add(const Duration(days: 1));
+    final repository = _FakeTasaRepository()
+      ..actual = _tasa(usd: 100, eur: 200, efectiva: hoy)
+      ..siguiente = _tasa(usd: 110, eur: 220, efectiva: manana);
+    final vm = ConversorViewmodel(repository: repository);
+    addTearDown(vm.dispose);
+
+    await vm.cargarTasa();
+
+    expect(vm.fechaTasaSiguiente, manana);
+    expect(vm.tasaSiguienteDisponible, isTrue);
+    expect(vm.fechaMaximaSeleccionable, manana);
+  });
 }

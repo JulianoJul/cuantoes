@@ -150,3 +150,15 @@
   - Se implementó esto en un método interno `_aplicarHeuristicaFecha(TasaBcv nuevaTasa)`.
   - La búsqueda de tasa actual solo considera entradas con `fechaEfectiva ≤ hoy` en Venezuela. Las entradas futuras se conservan para `obtenerTasaSiguiente()`, pero `_tasaActualPostRefresh()` nunca las devuelve como actuales.
 - **Impacto:** La fecha mostrada en la UI se mantiene fiel a la realidad incluso si hay retrasos en la publicación del BCV por la tarde o si la API entrega anticipadamente una tasa futura.
+
+---
+
+## DEC-012: Calendario limitado a la próxima tasa publicada
+
+- **Origen:** `[Solicitud del usuario]`
+- **Contexto y Causa:** El calendario permitía seleccionar mañana aunque su tasa aún no estuviera publicada, mostrando la tasa de hoy como aplicada o un error según el caso.
+- **Decisión:**
+  - `ConversorViewmodel.fechaTasaSiguiente` expone la `fechaEfectiva` de la próxima tasa cacheada (`TasaRepository.obtenerTasaSiguiente()`), o `null` si no existe.
+  - `ConversorViewmodel.fechaMaximaSeleccionable` devuelve esa fecha si es futura, o hoy en Venezuela en caso contrario.
+  - `_abrirCalendario` usa `fechaMaximaSeleccionable` como `lastDate` del DatePicker.
+- **Impacto:** No se pueden elegir fechas posteriores a la próxima tasa publicada; los fines de semana y feriados ya transcurridos siguen seleccionables.

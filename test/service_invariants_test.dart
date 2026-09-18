@@ -96,6 +96,30 @@ void main() {
   );
 
   test(
+    'fresh install with a future realtime rate recovers today from history',
+    () async {
+      final cache = BcvCacheService();
+      final hoy = _hoyVenezuela();
+      final actual = _tasa(hoy, 100, 110);
+      final futura = _tasa(hoy.add(const Duration(days: 1)), 200, 220);
+
+      final api = _FakeApi()
+        ..realtime = futura
+        ..historical = actual;
+      final repository = TasaRepository(
+        api: api,
+        scraper: _FakeScraper(),
+        cache: cache,
+      );
+
+      final result = await repository.refrescarTasa();
+
+      expect(result.usd, actual.usd);
+      expect(_dia(result.fechaEfectiva), _dia(hoy));
+    },
+  );
+
+  test(
     'historical cache lookup returns the latest prior effective entry',
     () async {
       final cache = BcvCacheService();

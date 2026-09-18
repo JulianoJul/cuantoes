@@ -44,6 +44,8 @@
 | `ConversorViewmodel.entradaController` | `TextEditingController` vinculado al TextField |
 | `ConversorViewmodel.variacion` | `double?` — variación porcentual de la tasa actual o histórica frente a la fecha efectiva inmediatamente anterior; no aplica a USDT |
 | `ConversorViewmodel.fechaEfectivaAplicada` | Fecha efectiva de la tasa que se está mostrando en la tarjeta |
+| `ConversorViewmodel.fechaTasaSiguiente` | `DateTime?` — fecha efectiva de la próxima tasa ya publicada, o `null` si aún no existe |
+| `ConversorViewmodel.fechaMaximaSeleccionable` | Mayor fecha elegible en el calendario: `fechaTasaSiguiente` o hoy en Venezuela |
 | `ConversorViewmodel.cargarTasa()` | Obtiene la tasa actual o histórica; conserva la fecha seleccionada aunque se aplique una tasa anterior |
 | `ConversorViewmodel.refrescarTasa()` | Fuerza refresco desde API |
 | `ConversorViewmodel.setMoneda(moneda)` | Cambia moneda (USD/EUR/USDT), carga USDT si aplica |

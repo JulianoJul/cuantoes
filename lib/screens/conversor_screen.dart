@@ -227,7 +227,7 @@ class _ConversorBody extends StatelessWidget {
   ) async {
     final hoy = _hoyVenezuela();
     final firstDate = DateTime(2016, 1, 1);
-    final lastDate = hoy.add(const Duration(days: 1));
+    final lastDate = vm.fechaMaximaSeleccionable;
     final requestedDate = vm.fechaSeleccionada ?? vm.tasa?.fechaEfectiva ?? hoy;
     final initialDate = _clampDate(requestedDate, firstDate, lastDate);
 

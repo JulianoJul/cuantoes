@@ -45,6 +45,19 @@ class ConversorViewmodel extends ChangeNotifier {
   bool _tasaSiguienteDisponible = false;
   bool get tasaSiguienteDisponible => _tasaSiguienteDisponible;
 
+  DateTime? _fechaTasaSiguiente;
+  DateTime? get fechaTasaSiguiente => _fechaTasaSiguiente;
+
+  /// Mayor fecha elegible en el calendario: la fecha efectiva de la próxima
+  /// tasa ya publicada, o hoy en Venezuela si aún no existe.
+  DateTime get fechaMaximaSeleccionable {
+    final ahora = ahoraVenezuela();
+    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
+    final siguiente = _fechaTasaSiguiente;
+    if (siguiente != null && siguiente.isAfter(hoy)) return siguiente;
+    return hoy;
+  }
+
   double get tasaActual => _tasa?.de(_moneda) ?? 0;
   double? variacion;
 
@@ -63,6 +76,7 @@ class ConversorViewmodel extends ChangeNotifier {
     _estado = EstadoTasa.cargando;
     _error = '';
     _tasaSiguienteDisponible = false;
+    _fechaTasaSiguiente = null;
     variacion = null;
     notifyListeners();
 
@@ -98,10 +112,10 @@ class ConversorViewmodel extends ChangeNotifier {
               fechaEfectiva: tasa.fechaEfectiva,
             );
 
-      if (fechaSolicitada == null) {
-        _tasaSiguienteDisponible = await _repository.existeTasaSiguiente();
-        if (_cargaGeneracion != generacion) return;
-      }
+      final siguiente = await _repository.obtenerTasaSiguiente();
+      if (_cargaGeneracion != generacion) return;
+      _fechaTasaSiguiente = siguiente?.fechaEfectiva;
+      _tasaSiguienteDisponible = fechaSolicitada == null && siguiente != null;
 
       // Sincronizamos feriados de Google en segundo plano.
       FeriadosService.sincronizar();
@@ -167,6 +181,7 @@ class ConversorViewmodel extends ChangeNotifier {
     _estado = EstadoTasa.cargando;
     _error = '';
     _tasaSiguienteDisponible = false;
+    _fechaTasaSiguiente = null;
     variacion = null;
     notifyListeners();
 
@@ -185,8 +200,10 @@ class ConversorViewmodel extends ChangeNotifier {
               origen: tasa.origen,
               fechaEfectiva: tasa.fechaEfectiva,
             );
-      _tasaSiguienteDisponible = await _repository.existeTasaSiguiente();
+      final siguiente = await _repository.obtenerTasaSiguiente();
       if (_cargaGeneracion != generacion) return;
+      _fechaTasaSiguiente = siguiente?.fechaEfectiva;
+      _tasaSiguienteDisponible = siguiente != null;
       FeriadosService.sincronizar(); // Sync en segundo plano
       _estado = EstadoTasa.listo;
       await _calcularVariacion(generacion: generacion);
