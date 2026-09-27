@@ -186,3 +186,22 @@
   - La UI muestra un botón de escaneo en el campo de entrada, un selector cámara/galería y un diálogo con los números detectados; al elegir uno se llena la entrada y se convierte.
   - R8 requiere `-dontwarn` para los modelos de otros idiomas en `android/app/proguard-rules.pro`.
 - **Impacto:** El APK universal crece ~32 MB por el modelo OCR; conviene usar `flutter build apk --split-per-abi` para distribuir.
+
+---
+
+## DEC-015: Proveedores JSON en cascada sin scraper
+
+- **Origen:** `[Solicitud del usuario]`
+- **Contexto y Causa:** El endpoint Rafnix y el scraper directo del BCV eran
+  puntos únicos de fallo. El scraper además dependía de HTML cambiante y de
+  Selenium/Firefox fuera de la app.
+- **Decisión:** `TasaRepository` consulta proveedores que implementan
+  `BcvProvider` en este orden:
+  1. DolarAPI, como fuente principal de USD/EUR actuales e históricos.
+  2. BCV Today, como fallback estático con snapshots diarios.
+  3. Chitty BCV, como segundo fallback actual y fuente P2P de USDT.
+  La caché local queda como último respaldo offline. Se eliminan el scraper
+  Dart, `scrap_bcv.py` y la dependencia `html`.
+- **Impacto:** La UI sigue consumiendo `TasaBcv` sin conocer el proveedor;
+  `origen` identifica la fuente que respondió y los fallbacks se pueden probar
+  con implementaciones inyectadas de `BcvProvider`.

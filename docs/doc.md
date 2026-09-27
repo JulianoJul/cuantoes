@@ -1,17 +1,23 @@
 # Cuantoes — Documentación
 
+## Mapa de documentación
+
+- Este archivo: arquitectura, flujo de datos y proveedores actuales.
+- `funciones.md`: catálogo de modelos, servicios, ViewModel y utilidades.
+- `decisiones.md`: decisiones de arquitectura (ADR) y contexto histórico.
+- `google-stitch-prompt.txt`: prompt listo para generar un rediseño UI/UX.
+
 ## Stack
 
 | Capa | Tecnología |
 |------|-----------|
 | Framework | Flutter (Dart 3.12+) |
 | Estado | Provider + ChangeNotifier |
-| HTTP | http + html (scraping) |
+| HTTP | http (APIs JSON) |
 | Cache | shared_preferences |
 | Formato | intl |
 | Localización | flutter_localizations (es) |
 | OCR | google_mlkit_text_recognition (on-device, offline) + image_picker |
-| Scraping Python | selenium + Firefox headless (alternativa) |
 
 ## Arquitectura
 
@@ -24,11 +30,13 @@ lib/
 │   ├── feriados_ve.dart             # Feriados bancarios VE (fijos + Pascua)
 │   └── numeros_ocr.dart             # Extracción y parseo de números desde OCR
 ├── services/
-│   ├── bcv_api_service.dart         # API: realtime + histórico + USDT
-│   ├── bcv_scraper_service.dart     # Scraping bcv.org.ve (fallback)
+│   ├── bcv_provider.dart            # Contrato común de proveedores
+│   ├── bcv_api_service.dart         # DolarAPI (proveedor principal)
+│   ├── bcv_today_service.dart       # BCV Today (fallback 1)
+│   ├── chitty_bcv_service.dart      # Chitty BCV (fallback 2 + USDT)
 │   ├── bcv_cache_service.dart       # SharedPreferences
-│   ├── ocr_service.dart             # Texto desde imagen (ML Kit)
-│   └── tasa_repository.dart         # cache actual → API → cache → scraper
+│   ├── ocr_service.dart              # Texto desde imagen (ML Kit)
+│   └── tasa_repository.dart          # proveedores en cascada → cache
 ├── viewmodels/
 │   └── conversor_viewmodel.dart     # ChangeNotifier, moneda, fechas, conversión, variación
 └── screens/
@@ -42,11 +50,10 @@ lib/
 Usuario → ConversorViewmodel.cargarTasa() → TasaRepository.obtenerTasa()
                                                  ├── cache con fechaEfectiva ≤ hoy VE y vigente? → retorna
                                                  └── refrescarTasa()
-                                                     ├── API → guarda cache → retorna si no es futura
-                                                     │          └── si es futura, conserva/usa la cache actual
-                                                     ├── cache actual → retorna
-                                                     └── scraper → guarda cache → retorna
-                                                         └── rethrow
+                                                      ├── DolarAPI → guarda cache
+                                                      ├── BCV Today → guarda cache
+                                                      ├── Chitty BCV → guarda cache
+                                                      └── última cache válida → retorna
 ```
 
 La cache consultada como tasa actual nunca devuelve una entrada con
@@ -58,8 +65,8 @@ en cache para informar la siguiente tasa disponible.
 Usuario → ConversorViewmodel.seleccionarFecha()
              ├── TasaRepository.obtenerTasaHistorica()
              │       ├── cache exacta por fecha efectiva? → retorna
-             │       ├── API USD/EUR (ventana 30d, fecha efectiva común ≤ solicitada) → guarda cache
-             │       └── se devuelve la mayor fecha efectiva ≤ solicitada entre la API y la cache previa
+              │       ├── proveedores con histórico → guarda cache
+              │       └── se devuelve la mayor fecha efectiva ≤ solicitada entre proveedor y cache
              └── _fechaSeleccionada conserva la fecha elegida
 ```
 
@@ -77,7 +84,7 @@ antes de que aparezca su tasa.
 
 ### Variación porcentual
 - `ConversorViewmodel._calcularVariacion()`: compara la tasa actual o histórica con la tasa de la fecha efectiva inmediatamente anterior
-- `TasaRepository.obtenerTasaAnterior()` resuelve esa tasa previa desde cache o API
+- `TasaRepository.obtenerTasaAnterior()` resuelve esa tasa previa desde cache o proveedores
 - Visible para USD y EUR con o sin fecha seleccionada; no para USDT
 - Se muestra en la UI como "▲ +0.61%" / "▼ -0.20%" junto a la tasa correspondiente
 
@@ -88,18 +95,17 @@ antes de que aparezca su tasa.
 - La UI ofrece cámara o galería y un diálogo con los números detectados; el elegido llena la entrada del conversor.
 
 ### Fechas y fuentes
-- Los timestamps Rafnix sin zona horaria se interpretan como UTC y se convierten a Venezuela (UTC-4) antes de aplicar el corte de las 14:00.
-- El histórico consulta USD y EUR por separado, pero solo combina valores de una misma `fechaEfectiva` común.
-- `BcvScraperService` usa "Fecha Valor" del HTML como fecha autoritativa cuando está presente; si falta, usa la fecha efectiva actual.
+- DolarAPI y los históricos de los proveedores solo combinan USD y EUR de una misma `fechaEfectiva` común.
+- BCV Today usa el campo `effective_date` de sus snapshots.
+- Chitty BCV infiere la fecha hábil anterior desde `updated_at` cuando su dataset no publica una fecha efectiva explícita.
 
-## Scraper Python
-`scrap_bcv.py` usa Selenium + Firefox headless para extraer tasas cuando el BCV bloquea HTTP.
-Output: JSON con `usd`, `eur`, `fecha_efectiva`, `fecha_valor_bcv`.
-Requiere: `pip install selenium`, Firefox, geckodriver.
-
-El script Python es una alternativa manual no integrada en el pipeline Flutter.
-El scraper Dart integrado es el que usa "Fecha Valor" como `fechaEfectiva`
-autoritativa cuando está disponible.
+## Proveedores y fechas
+- `DolarApiService` consulta USD/EUR actuales y sus históricos oficiales.
+- `BcvTodayService` consulta `rate.json` y snapshots diarios estáticos.
+- `ChittyBcvService` funciona como fallback de la tasa actual y proporciona
+  USDT mediante su histórico P2P; no se usa para históricos oficiales USD/EUR.
+- Todos los proveedores normalizan la respuesta al modelo `TasaBcv` antes de
+  entrar al repositorio.
 
 ## Comandos
 

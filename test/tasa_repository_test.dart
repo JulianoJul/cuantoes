@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cuantoes/models/tasa_bcv.dart';
 import 'package:cuantoes/services/bcv_api_service.dart';
 import 'package:cuantoes/services/bcv_cache_service.dart';
-import 'package:cuantoes/services/bcv_scraper_service.dart';
 import 'package:cuantoes/services/tasa_repository.dart';
 import 'package:cuantoes/utils/feriados_ve.dart';
 
@@ -19,13 +18,12 @@ void main() {
     final hoy = DateTime(ahora.year, ahora.month, ahora.day);
     setFeriadosGoogle({_claveFecha(hoy)});
 
-    final actual = _tasa(DateTime(hoy.year, hoy.month, hoy.day - 1), 100, 110);
+    final actual = _tasa(_diaHabilAnterior(hoy), 100, 110);
     final cache = BcvCacheService();
     await cache.guardarTasa(actual);
     final api = _FakeApi();
     final repository = TasaRepository(
       api: api,
-      scraper: _FakeScraper(),
       cache: cache,
     );
 
@@ -62,7 +60,6 @@ void main() {
       final api = _FakeApi()..historical = apiRate;
       final repository = TasaRepository(
         api: api,
-        scraper: _FakeScraper(),
         cache: cache,
       );
 
@@ -81,7 +78,6 @@ void main() {
     final api = _FakeApi()..historical = _tasa(requested, 101, 111);
     final repository = TasaRepository(
       api: api,
-      scraper: _FakeScraper(),
       cache: cache,
     );
 
@@ -102,7 +98,6 @@ void main() {
       final api = _FakeApi()..previous = apiRate;
       final repository = TasaRepository(
         api: api,
-        scraper: _FakeScraper(),
         cache: cache,
       );
 
@@ -121,7 +116,6 @@ void main() {
     final api = _FakeApi()..previous = _tasa(DateTime(2026, 9, 3), 90, 99);
     final repository = TasaRepository(
       api: api,
-      scraper: _FakeScraper(),
       cache: cache,
     );
 
@@ -134,6 +128,16 @@ void main() {
 
 String _claveFecha(DateTime fecha) =>
     '${fecha.year}${fecha.month.toString().padLeft(2, '0')}${fecha.day.toString().padLeft(2, '0')}';
+
+DateTime _diaHabilAnterior(DateTime fecha) {
+  var anterior = DateTime(fecha.year, fecha.month, fecha.day - 1);
+  while (anterior.weekday == DateTime.saturday ||
+      anterior.weekday == DateTime.sunday ||
+      esFeriadoBancario(anterior)) {
+    anterior = DateTime(anterior.year, anterior.month, anterior.day - 1);
+  }
+  return anterior;
+}
 
 TasaBcv _tasa(DateTime fechaEfectiva, double usd, double eur) => TasaBcv(
   usd: usd,
@@ -169,5 +173,3 @@ class _FakeApi extends BcvApiService {
     return previous;
   }
 }
-
-class _FakeScraper extends BcvScraperService {}

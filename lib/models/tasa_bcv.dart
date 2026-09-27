@@ -18,7 +18,7 @@ class TasaBcv {
   });
 
   /// Crea una TasaBcv con fechaEfectiva calculada desde la hora actual
-  /// en Venezuela (UTC-4). Usar para tasas en tiempo real (API/scraping).
+  /// en Venezuela (UTC-4). Usar para tasas en tiempo real de una API.
   factory TasaBcv.actual({
     required double usd,
     required double eur,

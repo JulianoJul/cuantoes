@@ -544,16 +544,19 @@ class _ConversorBody extends StatelessWidget {
     final origen = vm.tasa?.origen ?? '';
     if (origen.isEmpty) return const SizedBox.shrink();
 
-    final esScraping = origen.startsWith('scraping');
-    final icono = esScraping ? Icons.language : Icons.cloud;
-    final etiqueta = esScraping ? 'BCV directo' : 'API';
+    const nombres = {
+      'dolarapi': 'DolarAPI',
+      'bcv_today': 'BCV Today',
+      'chitty_bcv': 'Chitty BCV',
+    };
+    final etiqueta = nombres[origen] ?? 'API';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icono, size: 14, color: Colors.grey),
+          const Icon(Icons.cloud, size: 14, color: Colors.grey),
           const SizedBox(width: 4),
           Text(
             'Datos desde $etiqueta',

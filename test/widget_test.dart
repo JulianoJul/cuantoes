@@ -26,19 +26,20 @@ void main() {
 
     final ahora = ahoraVenezuela();
     final hoy = DateTime(ahora.year, ahora.month, ahora.day);
+    final fechaActual = _diaHabilAnterior(hoy);
     final manana = hoy.add(const Duration(days: 1));
     final consultaReciente = DateTime.now().toUtc().subtract(
       const Duration(minutes: 1),
     );
 
     SharedPreferences.setMockInitialValues({
-      cacheKey(hoy): jsonEncode({
+      cacheKey(fechaActual): jsonEncode({
         'usd': 72.5,
         'eur': 80.0,
         'usdt': 0,
-        'fecha': hoy.toIso8601String(),
+        'fecha': fechaActual.toIso8601String(),
         'origen': 'api',
-        'fecha_efectiva': hoy.toIso8601String(),
+        'fecha_efectiva': fechaActual.toIso8601String(),
       }),
       cacheKey(manana): jsonEncode({
         'usd': 172.5,
@@ -94,4 +95,14 @@ void main() {
 
     expect(find.text('Tasa BCV'), findsOneWidget);
   });
+}
+
+DateTime _diaHabilAnterior(DateTime fecha) {
+  var anterior = DateTime(fecha.year, fecha.month, fecha.day - 1);
+  while (anterior.weekday == DateTime.saturday ||
+      anterior.weekday == DateTime.sunday ||
+      esFeriadoBancario(anterior)) {
+    anterior = DateTime(anterior.year, anterior.month, anterior.day - 1);
+  }
+  return anterior;
 }

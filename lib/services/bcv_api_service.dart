@@ -1,126 +1,71 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import '../models/tasa_bcv.dart';
-import '../utils/feriados_ve.dart';
 
-class BcvApiService {
-  static const _baseUrl = 'https://dolar-vzla.rafnixg.dev/api/v1';
-  static const _venezuelaOffset = Duration(hours: 4);
+import 'package:http/http.dart' as http;
+
+import '../models/tasa_bcv.dart';
+import 'bcv_provider.dart';
+
+/// Cliente de DolarAPI, la fuente primaria de tasas oficiales BCV.
+class DolarApiService implements BcvProvider {
+  static const _baseUrl = 'https://ve.dolarapi.com/v1';
+  static const _timeout = Duration(seconds: 10);
+
   final http.Client _client;
 
-  BcvApiService({http.Client? client}) : _client = client ?? http.Client();
+  DolarApiService({http.Client? client}) : _client = client ?? http.Client();
 
+  @override
+  String get nombre => 'DolarAPI';
+
+  @override
   Future<TasaBcv> obtenerTasa() async {
-    final response = await _client
-        .get(Uri.parse('$_baseUrl/bcv/realtime'))
-        .timeout(const Duration(seconds: 10));
+    final respuestas = await Future.wait([
+      _obtenerMapa(Uri.parse('$_baseUrl/dolares/oficial')),
+      _obtenerMapa(Uri.parse('$_baseUrl/euros/oficial')),
+    ]);
 
-    if (response.statusCode != 200) {
-      throw Exception('Error en API BCV: HTTP ${response.statusCode}');
-    }
+    final usd = _parsearCotizacion(respuestas[0], 'USD');
+    final eur = _parsearCotizacion(respuestas[1], 'EUR');
 
-    final List<dynamic> data = json.decode(response.body) as List<dynamic>;
-
-    double? usd;
-    double? eur;
-    DateTime? fechaUsd;
-    DateTime? fechaEur;
-
-    for (final entry in data) {
-      final map = entry as Map<String, dynamic>;
-      final currency = map['currency'] as String;
-      final rate = (map['rate'] as num).toDouble();
-      final dateStr = map['date'] as String;
-      final providerDate = _parsearFechaProveedor(dateStr);
-
-      if (currency == 'dolar') {
-        usd = rate;
-        fechaUsd = providerDate;
-      }
-      if (currency == 'euro') {
-        eur = rate;
-        fechaEur = providerDate;
-      }
-    }
-
-    if (usd == null || eur == null || fechaUsd == null || fechaEur == null) {
-      throw Exception('API no devolvió USD y EUR');
-    }
-
-    final fechaEfectivaUsd = _fechaEfectivaProveedor(fechaUsd);
-    final fechaEfectivaEur = _fechaEfectivaProveedor(fechaEur);
-
-    // Do not combine realtime values that belong to different effective days.
-    if (fechaEfectivaUsd != fechaEfectivaEur) {
-      throw Exception('API devolvió USD y EUR de fechas efectivas distintas');
+    if (!_mismoDia(usd.fechaEfectiva, eur.fechaEfectiva)) {
+      throw StateError('DolarAPI devolvió USD y EUR de fechas distintas');
     }
 
     return TasaBcv(
-      usd: usd,
-      eur: eur,
+      usd: usd.valor,
+      eur: eur.valor,
       usdt: 0,
-      fecha: fechaUsd,
-      origen: 'api',
-      fechaEfectiva: fechaEfectivaUsd,
+      fecha: usd.fecha,
+      origen: 'dolarapi',
+      fechaEfectiva: usd.fechaEfectiva,
     );
   }
 
-  Future<double> obtenerUsdt() async {
-    final response = await _client
-        .get(Uri.parse('$_baseUrl/binance/realtime_ves'))
-        .timeout(const Duration(seconds: 10));
-
-    if (response.statusCode != 200) {
-      throw Exception('Error al obtener USDT: HTTP ${response.statusCode}');
-    }
-
-    final data = json.decode(response.body) as Map<String, dynamic>;
-    return (data['median_price'] as num?)?.toDouble() ?? 0;
+  @override
+  Future<TasaBcv?> obtenerTasaHistorica(DateTime fecha) async {
+    return _obtenerHistoricoComun(fecha, incluirLimite: true);
   }
 
+  @override
   Future<TasaBcv?> obtenerTasaAnterior(DateTime fechaLimite) async {
     return _obtenerHistoricoComun(fechaLimite, incluirLimite: false);
   }
 
-  Future<TasaBcv?> obtenerTasaHistorica(DateTime fecha) async {
-    return _obtenerHistoricoComun(fecha, incluirLimite: true);
-  }
+  @override
+  Future<double?> obtenerUsdt() async => null;
 
   Future<TasaBcv?> _obtenerHistoricoComun(
     DateTime fechaLimite, {
     required bool incluirLimite,
   }) async {
-    final limite = _dia(fechaLimite);
-
-    String formatDate(DateTime fecha) =>
-        '${fecha.year}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}T00:00:00';
-
-    final inicio = formatDate(limite.subtract(const Duration(days: 30)));
-    final fin = formatDate(limite.add(const Duration(days: 1)));
-
-    final results = await Future.wait([
-      _client
-          .get(
-            Uri.parse(
-              '$_baseUrl/history/bcv?currency=dolar&start_date=$inicio&end_date=$fin&limit=1000&order=desc',
-            ),
-          )
-          .timeout(const Duration(seconds: 10)),
-      _client
-          .get(
-            Uri.parse(
-              '$_baseUrl/history/bcv?currency=euro&start_date=$inicio&end_date=$fin&limit=1000&order=desc',
-            ),
-          )
-          .timeout(const Duration(seconds: 10)),
+    final respuestas = await Future.wait([
+      _obtenerLista(Uri.parse('$_baseUrl/historicos/dolares/oficial')),
+      _obtenerLista(Uri.parse('$_baseUrl/historicos/euros/oficial')),
     ]);
 
-    final dolarRates = _extraerRates(results[0]);
-    final euroRates = _extraerRates(results[1]);
-    if (dolarRates.isEmpty || euroRates.isEmpty) return null;
-
-    final usdPorFecha = _agruparPorFechaEfectiva(dolarRates);
-    final eurPorFecha = _agruparPorFechaEfectiva(euroRates);
+    final usdPorFecha = _agruparHistorico(respuestas[0], 'USD');
+    final eurPorFecha = _agruparHistorico(respuestas[1], 'EUR');
+    final limite = _dia(fechaLimite);
     DateTime? mejorFecha;
 
     for (final fecha in usdPorFecha.keys) {
@@ -142,90 +87,123 @@ class BcvApiService {
       usd: usd.valor,
       eur: eur.valor,
       usdt: 0,
-      // Keep the provider timestamp for diagnostics; effective-date selection
-      // is based on the shared normalized effective day above.
-      fecha: usd.fechaProveedor,
-      origen: 'api',
+      fecha: usd.fecha,
+      origen: 'dolarapi',
       fechaEfectiva: mejorFecha,
     );
   }
 
-  List<Map<String, dynamic>> _extraerRates(http.Response response) {
-    if (response.statusCode != 200) return [];
-    final decoded = json.decode(response.body);
-    if (decoded is! Map<String, dynamic>) return [];
-    final currencies = decoded['currencies'];
-    if (currencies is! List) return [];
-    return currencies.whereType<Map<String, dynamic>>().toList();
+  Future<Map<String, dynamic>> _obtenerMapa(Uri uri) async {
+    final decoded = await _obtenerJson(uri);
+    if (decoded is! Map) {
+      throw FormatException('$nombre devolvió un objeto inválido');
+    }
+    return Map<String, dynamic>.from(decoded);
   }
 
-  Map<DateTime, _ApiRate> _agruparPorFechaEfectiva(
-    List<Map<String, dynamic>> rates,
+  Future<List<dynamic>> _obtenerLista(Uri uri) async {
+    final decoded = await _obtenerJson(uri);
+    if (decoded is! List) {
+      throw FormatException('$nombre devolvió un histórico inválido');
+    }
+    return decoded;
+  }
+
+  Future<dynamic> _obtenerJson(Uri uri) async {
+    final response = await _client
+        .get(
+          uri,
+          headers: const {
+            'Accept': 'application/json',
+            'Cache-Control': 'no-cache',
+          },
+        )
+        .timeout(_timeout);
+
+    if (response.statusCode != 200) {
+      throw StateError('$nombre: HTTP ${response.statusCode}');
+    }
+
+    try {
+      return jsonDecode(response.body);
+    } on FormatException catch (error) {
+      throw FormatException('$nombre devolvió JSON inválido: $error');
+    }
+  }
+
+  _ApiQuote _parsearCotizacion(Map<String, dynamic> map, String moneda) {
+    final valor = map['promedio'];
+    final rawFecha = map['fechaActualizacion'] ?? map['fecha'];
+    if (valor is! num || rawFecha is! String) {
+      throw FormatException('$nombre no devolvió una tasa $moneda válida');
+    }
+
+    final fecha = DateTime.tryParse(rawFecha);
+    if (fecha == null || valor <= 0) {
+      throw FormatException('$nombre no devolvió una tasa $moneda válida');
+    }
+
+    return _ApiQuote(
+      valor: valor.toDouble(),
+      fecha: fecha,
+      fechaEfectiva: _dia(fecha),
+    );
+  }
+
+  Map<DateTime, _ApiQuote> _agruparHistorico(
+    List<dynamic> entries,
+    String moneda,
   ) {
-    final grouped = <DateTime, _ApiRate>{};
+    final result = <DateTime, _ApiQuote>{};
 
-    for (final rate in rates) {
-      final rawDate = rate['date'];
-      final rawValue = rate['rate'];
-      if (rawDate is! String || rawValue is! num) continue;
+    for (final entry in entries) {
+      if (entry is! Map) continue;
+      final map = Map<String, dynamic>.from(entry);
+      final valor = map['promedio'];
+      final rawFecha = map['fecha'];
+      if (valor is! num || rawFecha is! String || valor <= 0) continue;
 
-      try {
-        final providerDate = _parsearFechaProveedor(rawDate);
-        final effectiveDate = _fechaEfectivaProveedor(providerDate);
-        final candidate = _ApiRate(
-          valor: rawValue.toDouble(),
-          fechaProveedor: providerDate,
-          fechaEfectiva: effectiveDate,
-        );
-        final previous = grouped[effectiveDate];
-        if (previous == null || providerDate.isAfter(previous.fechaProveedor)) {
-          grouped[effectiveDate] = candidate;
-        }
-      } on FormatException {
-        // Ignore malformed provider rows and evaluate the remaining history.
+      final fecha = DateTime.tryParse(rawFecha);
+      if (fecha == null) continue;
+      final quote = _ApiQuote(
+        valor: valor.toDouble(),
+        fecha: fecha,
+        fechaEfectiva: _dia(fecha),
+      );
+      final previous = result[quote.fechaEfectiva];
+      if (previous == null || quote.fecha.isAfter(previous.fecha)) {
+        result[quote.fechaEfectiva] = quote;
       }
     }
 
-    return grouped;
-  }
-
-  DateTime _fechaEfectivaProveedor(DateTime fecha) =>
-      _dia(calcularFechaEfectiva(fecha.toUtc().subtract(_venezuelaOffset)));
-
-  DateTime _parsearFechaProveedor(String raw) {
-    final parsed = DateTime.parse(raw);
-    if (!_tieneZonaHoraria(raw)) {
-      // Rafnix documents offset-less timestamps as UTC wall-clock components.
-      return DateTime.utc(
-        parsed.year,
-        parsed.month,
-        parsed.day,
-        parsed.hour,
-        parsed.minute,
-        parsed.second,
-        parsed.millisecond,
-        parsed.microsecond,
-      );
+    if (result.isEmpty) {
+      throw FormatException('$nombre no devolvió histórico de $moneda');
     }
-    return parsed.toUtc();
+    return result;
   }
 
-  bool _tieneZonaHoraria(String raw) => RegExp(
-    r'[T ]\d{2}:\d{2}.*(?:Z|[+-]\d{2}:?\d{2})$',
-    caseSensitive: false,
-  ).hasMatch(raw.trim());
+  bool _mismoDia(DateTime first, DateTime second) =>
+      first.year == second.year &&
+      first.month == second.month &&
+      first.day == second.day;
 
   DateTime _dia(DateTime fecha) => DateTime(fecha.year, fecha.month, fecha.day);
 }
 
-class _ApiRate {
+/// Nombre anterior conservado para no romper integraciones internas.
+/// La implementación ahora consulta DolarAPI.
+class BcvApiService extends DolarApiService {
+  BcvApiService({super.client});
+}
+
+class _ApiQuote {
   final double valor;
-  final DateTime fechaProveedor;
+  final DateTime fecha;
   final DateTime fechaEfectiva;
 
-  const _ApiRate({
+  const _ApiQuote({
     required this.valor,
-    required this.fechaProveedor,
+    required this.fecha,
     required this.fechaEfectiva,
   });
 }

@@ -14,11 +14,14 @@
 
 | Clase/Método | Descripción |
 |-------------|-------------|
-| `BcvApiService.obtenerTasa()` | Consulta API realtime (USD y EUR), normaliza timestamps Rafnix sin zona como UTC y exige una fecha efectiva común |
-| `BcvApiService.obtenerTasaHistorica(fecha)` | Consulta histórico en la ventana `[fecha-30 días, fecha+1 día]`; agrupa USD/EUR por fecha efectiva común y retorna la mayor `fechaEfectiva ≤ fecha` |
-| `BcvApiService.obtenerTasaAnterior(fechaLimite)` | Consulta el histórico y retorna la tasa USD/EUR de la fecha efectiva común inmediatamente anterior a `fechaLimite` |
-| `BcvApiService.obtenerUsdt()` | Consulta USDT vía `/binance/realtime_ves` |
-| `BcvScraperService.obtenerTasa()` | Scraping de `bcv.org.ve`, parsea `#dolar` y `#euro`; si existe "Fecha Valor", la usa como `fecha` y `fechaEfectiva` autoritativas |
+| `BcvProvider` | Contrato común para proveedores de tasa actual, histórico, anterior y USDT opcional |
+| `DolarApiService.obtenerTasa()` | Consulta DolarAPI para USD/EUR oficiales y exige una fecha efectiva común |
+| `DolarApiService.obtenerTasaHistorica(fecha)` | Consulta los históricos oficiales USD/EUR y retorna la mayor fecha común `≤ fecha` |
+| `DolarApiService.obtenerTasaAnterior(fechaLimite)` | Consulta la fecha efectiva común inmediatamente anterior a `fechaLimite` |
+| `BcvTodayService.obtenerTasa()` | Consulta `rate.json`, snapshot estático actual de BCV Today |
+| `BcvTodayService.obtenerTasaHistorica(fecha)` | Consulta snapshots diarios de BCV Today, retrocediendo si la fecha no existe |
+| `ChittyBcvService.obtenerTasa()` | Consulta el dataset actual USD/EUR de Chitty BCV como segundo fallback |
+| `ChittyBcvService.obtenerUsdt()` | Consulta el promedio P2P USDT/VES de `p2p_history.json` |
 | `BcvCacheService.obtenerTasa()` | Lee la tasa cacheada más reciente cuya `fechaEfectiva` no es posterior a hoy en Venezuela |
 | `BcvCacheService.obtenerTasaMasRecienteHasta(fechaLimite)` | Retorna la tasa cacheada más reciente con `fechaEfectiva ≤ fechaLimite` |
 | `BcvCacheService.obtenerTasaMasRecienteMenorQue(fechaLimite)` | Retorna la tasa cacheada más reciente con `fechaEfectiva < fechaLimite` |
@@ -28,10 +31,10 @@
 | `BcvCacheService.obtenerUltimaConsulta()` / `registrarConsulta()` | Lee o registra la hora de la última consulta a la API |
 | `OcrService.reconocerTexto(rutaImagen)` | Reconoce texto de una imagen con ML Kit (script Latin, on-device) |
 | `TasaRepository.obtenerTasa()` | Orquestador: cache → refrescarTasa |
-| `TasaRepository.refrescarTasa()` | Fuerza actualización: API → cache → scraper; una tasa futura nunca se devuelve como actual |
-| `TasaRepository.obtenerTasaHistorica(fecha)` | Histórico: cache exacta → API con mayor fecha efectiva `≤ fecha` → devuelve la mayor fecha efectiva entre la API y la cache previa; conserva la fecha solicitada en la UI |
-| `TasaRepository.obtenerTasaAnterior(fechaLimite)` | Obtiene la tasa de la fecha efectiva inmediatamente anterior: cache exacta → API → mayor fecha efectiva entre la API y la cache previa |
-| `TasaRepository.obtenerUsdt()` | USDT vía API |
+| `TasaRepository.refrescarTasa()` | Fuerza actualización: DolarAPI → BCV Today → Chitty BCV → cache; una tasa futura nunca se devuelve como actual |
+| `TasaRepository.obtenerTasaHistorica(fecha)` | Histórico: cache exacta → proveedores con histórico → cache previa; conserva la fecha solicitada en la UI |
+| `TasaRepository.obtenerTasaAnterior(fechaLimite)` | Obtiene la tasa de la fecha efectiva inmediatamente anterior: cache → proveedores con histórico |
+| `TasaRepository.obtenerUsdt()` | Prueba los proveedores en orden hasta obtener un USDT válido |
 | `TasaRepository.obtenerTasaSiguiente()` / `existeTasaSiguiente()` | Consulta si hay una tasa efectiva futura cacheada para mostrarla como siguiente disponible |
 | `SettingsProvider.isDarkMode` | Getter: indica si el modo oscuro está activo |
 | `SettingsProvider.isAutomaticComma` | Getter: indica si el modo de coma automática está activo |
