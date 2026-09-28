@@ -2,7 +2,8 @@ import 'resultado_tasa.dart';
 
 /// Values shared with Android RemoteViews through home_widget preferences.
 class WidgetSnapshot {
-  static const version = 1;
+  static const version = 2;
+  static const keyPayload = 'widget_snapshot_payload';
   static const keyVersion = 'widget_snapshot_version';
   static const keyUsd = 'widget_usd_rate';
   static const keyEur = 'widget_eur_rate';
@@ -18,6 +19,7 @@ class WidgetSnapshot {
   final String validatedAt;
   final String source;
   final String status;
+  final DateTime? validatedAtUtc;
 
   const WidgetSnapshot({
     required this.usd,
@@ -26,7 +28,19 @@ class WidgetSnapshot {
     required this.validatedAt,
     required this.source,
     required this.status,
+    this.validatedAtUtc,
   });
+
+  Map<String, Object?> toJson() => {
+    'version': version,
+    'usd': usd,
+    'eur': eur,
+    'effectiveDate': effectiveDate,
+    'validatedAt': validatedAt,
+    'validatedAtUtc': validatedAtUtc?.toUtc().toIso8601String(),
+    'source': source,
+    'status': status,
+  };
 
   factory WidgetSnapshot.fromResultadoTasa(ResultadoTasa resultado) {
     final tasa = resultado.tasa;
@@ -36,13 +50,13 @@ class WidgetSnapshot {
         : 'Validada ${_fechaHora(_horaVenezuela(momento))}';
     final status = resultado.errorActualizacion != null
         ? resultado.frescura == EstadoFrescuraTasa.antigua
-              ? 'Sin conexión · tasa antigua conservada; verifica antes de usar'
-              : 'Sin conexión · se conserva la tasa guardada'
+              ? 'No se pudo actualizar · se conserva una tasa antigua; verifica antes de usar'
+              : 'No se pudo actualizar · se conserva la tasa disponible'
         : resultado.frescura == EstadoFrescuraTasa.antigua
         ? 'Fecha efectiva antigua · verifica el valor'
         : resultado.vieneDeCache
         ? 'Tasa guardada · $validatedAt'
-        : 'Actualizada · $validatedAt';
+        : validatedAt;
 
     return WidgetSnapshot(
       usd: _formatearTasa(tasa.usd),
@@ -51,6 +65,7 @@ class WidgetSnapshot {
       validatedAt: validatedAt,
       source: _nombreFuente(tasa.origen),
       status: status,
+      validatedAtUtc: momento,
     );
   }
 

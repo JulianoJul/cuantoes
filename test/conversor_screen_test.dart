@@ -47,7 +47,9 @@ void main() {
 
     await tester.pumpWidget(CuantoesApp(repository: _ScreenRepository()));
     await tester.pump();
-    await tester.tap(find.byIcon(Icons.calendar_today));
+    await tester.tap(find.textContaining('1 USD = Bs.').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.calendar_month_outlined));
     await tester.pumpAndSettle();
 
     final ahora = ahoraVenezuela();
@@ -71,7 +73,7 @@ void main() {
 
     final fecha =
         '${sabado.day.toString().padLeft(2, '0')}/${sabado.month.toString().padLeft(2, '0')}/${sabado.year}';
-    expect(find.text('Sábado - $fecha'), findsOneWidget);
+    expect(find.textContaining('Solicitada $fecha'), findsOneWidget);
   });
 
   testWidgets('la pantalla puede desplazarse con teclado en 360x640', (

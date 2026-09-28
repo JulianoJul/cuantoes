@@ -11,11 +11,15 @@ import '../utils/ocr_coordinate_mapper.dart';
 class OcrSelectionScreen extends StatefulWidget {
   final String rutaImagen;
   final OcrService servicio;
+  final Future<String?> Function()? onElegirOtraImagen;
+  final String monedaConversor;
 
   const OcrSelectionScreen({
     super.key,
     required this.rutaImagen,
     this.servicio = const OcrService(),
+    this.onElegirOtraImagen,
+    this.monedaConversor = 'USD',
   });
 
   @override
@@ -23,6 +27,7 @@ class OcrSelectionScreen extends StatefulWidget {
 }
 
 class _OcrSelectionScreenState extends State<OcrSelectionScreen> {
+  late String _rutaImagenActual;
   DocumentoOcr? _documento;
   Object? _error;
   final Set<String> _seleccion = {};
@@ -32,6 +37,7 @@ class _OcrSelectionScreenState extends State<OcrSelectionScreen> {
   @override
   void initState() {
     super.initState();
+    _rutaImagenActual = widget.rutaImagen;
     _reconocer();
   }
 
@@ -42,7 +48,7 @@ class _OcrSelectionScreenState extends State<OcrSelectionScreen> {
     });
     try {
       final documento = await widget.servicio.reconocerDocumento(
-        widget.rutaImagen,
+        _rutaImagenActual,
       );
       if (!mounted) return;
       setState(() {
@@ -252,23 +258,45 @@ class _OcrSelectionScreenState extends State<OcrSelectionScreen> {
     if (candidato == null || !mounted) return;
 
     final resultado = await showDialog<TransferenciaOcr>(
-      context: context,
-      builder: (context) => _EditarMontoOcrDialog(
-        candidato: candidato,
-        monedaInicial: _monedaSugerida(candidato),
-      ),
+        context: context,
+        builder: (context) => _EditarMontoOcrDialog(
+          candidato: candidato,
+          monedaInicial: _monedaSugerida(candidato),
+          monedaConversor: widget.monedaConversor,
+        ),
     );
     if (resultado != null && mounted) Navigator.pop(context, resultado);
   }
 
   String _monedaSugerida(NumeroDetectado candidato) {
     if (candidato.monedaSugerida != null) return candidato.monedaSugerida!;
+    var inicioRegion = 0;
+    RegionOcr? anterior;
     for (final region in _regionesSeleccionadas) {
-      if (region.texto == candidato.texto && region.monedaSugerida != null) {
-        return region.monedaSugerida!;
+      if (anterior != null) inicioRegion++;
+      final finRegion = inicioRegion + region.texto.length;
+      if (candidato.inicio >= inicioRegion && candidato.fin <= finRegion) {
+        return region.monedaSugerida ?? 'USD';
       }
+      inicioRegion = finRegion;
+      anterior = region;
     }
     return 'USD';
+  }
+
+  Future<void> _elegirOtraImagen() async {
+    final elegir = widget.onElegirOtraImagen;
+    if (elegir == null || _procesando) return;
+    final nuevaRuta = await elegir();
+    if (!mounted || nuevaRuta == null) return;
+    setState(() {
+      _rutaImagenActual = nuevaRuta;
+      _documento = null;
+      _error = null;
+      _seleccion.clear();
+      _anclaArrastre = null;
+    });
+    await _reconocer();
   }
 
   void _seleccionarLinea(List<RegionOcr> linea) {
@@ -312,6 +340,13 @@ class _OcrSelectionScreenState extends State<OcrSelectionScreen> {
             onPressed: _procesando ? null : _reconocer,
             icon: const Icon(Icons.refresh),
           ),
+          IconButton(
+            tooltip: 'Elegir otra imagen',
+            onPressed: _procesando || widget.onElegirOtraImagen == null
+                ? null
+                : _elegirOtraImagen,
+            icon: const Icon(Icons.photo_library_outlined),
+          ),
         ],
       ),
       body: _procesando
@@ -333,10 +368,22 @@ class _OcrSelectionScreenState extends State<OcrSelectionScreen> {
               children: [
                 Expanded(child: _buildImage(documento)),
                 if (documento.textoCompleto.trim().isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Text(
-                      'No se detectó texto. Puedes repetir o elegir otra imagen.',
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'No se detectó texto en esta imagen.',
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: widget.onElegirOtraImagen == null
+                              ? null
+                              : _elegirOtraImagen,
+                          child: const Text('Elegir otra'),
+                        ),
+                      ],
                     ),
                   ),
                 _buildAccesibilidad(documento),
@@ -381,14 +428,14 @@ class _OcrSelectionScreenState extends State<OcrSelectionScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Image.file(File(documento.rutaImagen), fit: BoxFit.contain),
-                  CustomPaint(
-                    painter: _OverlayOcrPainter(
-                      documento: documento,
-                      mapper: mapper,
-                      seleccion: _seleccion,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
+                   Image.file(File(_rutaImagenActual), fit: BoxFit.contain),
+                   CustomPaint(
+                     painter: _OverlayOcrPainter(
+                       documento: documento,
+                       mapper: mapper,
+                       seleccion: Set<String>.unmodifiable(_seleccion),
+                       color: Theme.of(context).colorScheme.primary,
+                     ),
                   ),
                 ],
               ),
@@ -482,27 +529,58 @@ class _OcrSelectionScreenState extends State<OcrSelectionScreen> {
     );
   }
 
-  Widget _buildError() => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.error_outline, size: 40),
-          const SizedBox(height: 12),
-          const Text(
-            'No se pudo reconocer esta imagen. Puedes reintentar o volver a elegirla.',
-          ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: _reconocer,
-            icon: const Icon(Icons.refresh),
-            label: const Text('Reintentar'),
-          ),
-        ],
+  Widget _buildError() {
+    final error = _error;
+    final mensaje = error is OcrException
+        ? error.mensajeUsuario
+        : 'No se pudo procesar esta imagen.';
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.image_not_supported_outlined, size: 40),
+            const SizedBox(height: 12),
+            Text(mensaje, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _reconocer,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Reintentar'),
+                ),
+                FilledButton.icon(
+                  onPressed: widget.onElegirOtraImagen == null
+                      ? null
+                      : _elegirOtraImagen,
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: const Text('Elegir otra imagen'),
+                ),
+              ],
+            ),
+            if (error is OcrException) ...[
+              const SizedBox(height: 16),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: const Text('Detalles técnicos'),
+                children: [
+                  SelectableText(
+                    '${error.etapa.name}: ${error.detalleTecnico}',
+                    textAlign: TextAlign.start,
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _OverlayOcrPainter extends CustomPainter {
@@ -564,10 +642,12 @@ class _OverlayOcrPainter extends CustomPainter {
 class _EditarMontoOcrDialog extends StatefulWidget {
   final NumeroDetectado candidato;
   final String monedaInicial;
+  final String monedaConversor;
 
   const _EditarMontoOcrDialog({
     required this.candidato,
     required this.monedaInicial,
+    required this.monedaConversor,
   });
 
   @override
@@ -579,6 +659,7 @@ class _EditarMontoOcrDialogState extends State<_EditarMontoOcrDialog> {
   late String _moneda;
   String? _error;
   bool? _interpretarComoDecimal;
+  String? _textoAmbiguoConfirmado;
 
   @override
   void initState() {
@@ -619,11 +700,12 @@ class _EditarMontoOcrDialogState extends State<_EditarMontoOcrDialog> {
   }
 
   bool get _requiereInterpretacion =>
-      widget.candidato.separadorAmbiguo &&
-      RegExp(r'^\d{1,3}[,.]\d{3}$').hasMatch(_controller.text.trim());
+      RegExp(r'^\d{1,3}[,.]\d{3}$').hasMatch(_controller.text.trim()) &&
+      _controller.text.trim().split(RegExp('[,.]')).first != '0';
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    scrollable: true,
     title: const Text('Revisar monto'),
     content: Column(
       mainAxisSize: MainAxisSize.min,
@@ -631,6 +713,14 @@ class _EditarMontoOcrDialogState extends State<_EditarMontoOcrDialog> {
         TextField(
           controller: _controller,
           autofocus: true,
+          onChanged: (texto) => setState(() {
+            final normalizado = texto.trim();
+            if (normalizado != _textoAmbiguoConfirmado) {
+              _interpretarComoDecimal = null;
+              _textoAmbiguoConfirmado = normalizado;
+            }
+            _error = null;
+          }),
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           inputFormatters: [
             FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
@@ -679,6 +769,13 @@ class _EditarMontoOcrDialogState extends State<_EditarMontoOcrDialog> {
           onChanged: (value) {
             if (value != null) setState(() => _moneda = value);
           },
+        ),
+        const SizedBox(height: 8),
+        Text(
+          _moneda == 'VES'
+              ? 'Dirección: VES → ${widget.monedaConversor}.'
+              : 'Dirección: $_moneda → bolívares.',
+          style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
     ),

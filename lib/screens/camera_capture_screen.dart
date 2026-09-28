@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+const _cameraImageChannel = MethodChannel('ve.cuantoes/camera_image');
 
 class CameraCaptureScreen extends StatefulWidget {
   const CameraCaptureScreen({super.key});
@@ -12,6 +16,9 @@ class CameraCaptureScreen extends StatefulWidget {
 
 class _CameraCaptureScreenState extends State<CameraCaptureScreen>
     with WidgetsBindingObserver {
+  static const _ratioFotoHorizontal = 4 / 3;
+  static const _ratioFotoVertical = 3 / 4;
+
   CameraController? _controller;
   String? _error;
   bool _capturando = false;
@@ -46,7 +53,10 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
       );
       candidato = CameraController(
         trasera,
-        ResolutionPreset.high,
+        // CameraX selecciona la resolución de Preview e ImageCapture con el
+        // mismo preset. 1080p da detalle suficiente para OCR; el encuadre 4:3
+        // se recorta después tanto en la vista como en el JPEG final.
+        ResolutionPreset.veryHigh,
         enableAudio: false,
       );
       await candidato.initialize();
@@ -100,7 +110,28 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
     try {
       final foto = await controller.takePicture();
       if (!mounted || !identical(_controller, controller)) return;
-      Navigator.pop(context, foto.path);
+      final rutaAjustada = await _recortarFoto(
+        foto,
+        _aspectRatioObjetivo(controller),
+      );
+      if (!mounted || !identical(_controller, controller)) return;
+      Navigator.pop(context, rutaAjustada);
+    } on PlatformException catch (_) {
+      if (mounted) {
+        setState(() => _capturando = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se pudo ajustar la foto al encuadre 4:3. Intenta otra vez.'),
+          ),
+        );
+      }
+    } on FormatException catch (_) {
+      if (mounted) {
+        setState(() => _capturando = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo preparar la foto para escanear.')),
+        );
+      }
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -109,6 +140,85 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
         });
       }
     }
+  }
+
+  Future<String> _recortarFoto(XFile foto, double aspectRatio) async {
+    if (!Platform.isAndroid) return foto.path;
+    final rutaRecortada = await _cameraImageChannel.invokeMethod<String>(
+      'cropToAspectRatio',
+      {'path': foto.path, 'aspectRatio': aspectRatio},
+    );
+    if (rutaRecortada == null || rutaRecortada.isEmpty) {
+      throw const FormatException('No se pudo preparar la foto para OCR');
+    }
+    try {
+      await File(foto.path).delete();
+    } on FileSystemException {
+      // La imagen recortada ya está guardada; limpiar el original es opcional.
+    }
+    return rutaRecortada;
+  }
+
+  bool _esHorizontal(CameraController controller) => const {
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  }.contains(controller.value.deviceOrientation);
+
+  double _aspectRatioObjetivo(CameraController controller) => _esHorizontal(
+    controller,
+  )
+      ? _ratioFotoHorizontal
+      : _ratioFotoVertical;
+
+  Widget _visorCuatroATres(CameraController controller) {
+    final horizontal = _esHorizontal(controller);
+    final aspectRatioMarco = horizontal
+        ? _ratioFotoHorizontal
+        : _ratioFotoVertical;
+    // CameraPreview ya adapta la orientación del sensor. Darle exactamente
+    // esa proporción y recortar el excedente evita deformar la textura.
+    final aspectRatioOrigen = horizontal
+        ? controller.value.aspectRatio
+        : 1 / controller.value.aspectRatio;
+
+    return Center(
+      child: AspectRatio(
+        aspectRatio: aspectRatioMarco,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final anchoMarco = constraints.maxWidth;
+            final altoMarco = constraints.maxHeight;
+            final anchoOrigen = aspectRatioOrigen > aspectRatioMarco
+                ? altoMarco * aspectRatioOrigen
+                : anchoMarco;
+            final altoOrigen = anchoOrigen / aspectRatioOrigen;
+
+            return Container(
+              foregroundDecoration: BoxDecoration(
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  width: 1,
+                ),
+              ),
+              child: ClipRect(
+                child: OverflowBox(
+                  alignment: Alignment.center,
+                  minWidth: anchoOrigen,
+                  maxWidth: anchoOrigen,
+                  minHeight: altoOrigen,
+                  maxHeight: altoOrigen,
+                  child: SizedBox(
+                    width: anchoOrigen,
+                    height: altoOrigen,
+                    child: CameraPreview(controller),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -130,6 +240,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
+        systemOverlayStyle: SystemUiOverlayStyle.light,
         title: const Text('Escanear precio'),
       ),
       body: _error != null
@@ -159,11 +270,13 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
           : Column(
               children: [
                 Expanded(
-                  child: Center(
-                    child: AspectRatio(
-                      aspectRatio: controller.value.aspectRatio,
-                      child: CameraPreview(controller),
-                    ),
+                  child: _visorCuatroATres(controller),
+                ),
+                const Padding(
+                  padding: EdgeInsets.only(top: 12),
+                  child: Text(
+                    'Encuadra el texto dentro del marco 4:3',
+                    style: TextStyle(color: Colors.white70),
                   ),
                 ),
                 Padding(

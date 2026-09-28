@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:home_widget/home_widget.dart';
@@ -13,41 +14,14 @@ class HomeWidgetService {
   Future<void> publicar(ResultadoTasa resultado) async {
     if (!Platform.isAndroid) return;
     final snapshot = WidgetSnapshot.fromResultadoTasa(resultado);
-    try {
-      await HomeWidget.saveWidgetData<String>(
-        WidgetSnapshot.keyUsd,
-        snapshot.usd,
-      );
-      await HomeWidget.saveWidgetData<String>(
-        WidgetSnapshot.keyEur,
-        snapshot.eur,
-      );
-      await HomeWidget.saveWidgetData<String>(
-        WidgetSnapshot.keyEffectiveDate,
-        snapshot.effectiveDate,
-      );
-      await HomeWidget.saveWidgetData<String>(
-        WidgetSnapshot.keyValidatedAt,
-        snapshot.validatedAt,
-      );
-      await HomeWidget.saveWidgetData<String>(
-        WidgetSnapshot.keySource,
-        snapshot.source,
-      );
-      await HomeWidget.saveWidgetData<String>(
-        WidgetSnapshot.keyStatus,
-        snapshot.status,
-      );
-      // Commit the version marker last so native receivers never accept a
-      // partially written snapshot after process death.
-      await HomeWidget.saveWidgetData<int>(
-        WidgetSnapshot.keyVersion,
-        WidgetSnapshot.version,
-      );
-      await _actualizarProveedores();
-    } catch (_) {
-      // The converter must remain usable if launcher/widget storage is absent.
+    final guardado = await HomeWidget.saveWidgetData<String>(
+      WidgetSnapshot.keyPayload,
+      jsonEncode(snapshot.toJson()),
+    );
+    if (guardado != true) {
+      throw StateError('No se pudo guardar el snapshot de los widgets');
     }
+    await _actualizarProveedores();
   }
 
   Future<void> actualizarMonedaCompacta(String moneda) async {

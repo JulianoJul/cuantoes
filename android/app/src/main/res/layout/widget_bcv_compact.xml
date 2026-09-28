@@ -13,7 +13,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="USD · BCV"
-        android:textColor="#FFB4C5FF"
+        android:textColor="@color/widget_accent"
         android:textSize="10sp"
         android:textStyle="bold" />
     <TextView
@@ -23,7 +23,7 @@
         android:ellipsize="end"
         android:singleLine="true"
         android:text="Sin dato · abre Cuantoes"
-        android:textColor="#FFDAE2FD"
+        android:textColor="@color/widget_text_primary"
         android:textSize="17sp"
         android:textStyle="bold" />
     <TextView
@@ -33,6 +33,6 @@
         android:ellipsize="end"
         android:singleLine="true"
         android:text="BCV"
-        android:textColor="#FFC3C6D7"
+        android:textColor="@color/widget_text_secondary"
         android:textSize="9sp" />
 </LinearLayout>

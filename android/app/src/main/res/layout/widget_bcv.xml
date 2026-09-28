@@ -12,7 +12,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="CUANTOES · BCV"
-        android:textColor="#FFB4C5FF"
+        android:textColor="@color/widget_accent"
         android:textSize="11sp"
         android:textStyle="bold" />
 
@@ -33,7 +33,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="USD"
-                android:textColor="#FFC3C6D7"
+                android:textColor="@color/widget_text_secondary"
                 android:textSize="12sp" />
             <TextView
                 android:id="@+id/widget_usd_rate"
@@ -42,16 +42,18 @@
                 android:ellipsize="end"
                 android:singleLine="true"
                 android:text="—"
-                android:textColor="#FFDAE2FD"
+                android:textColor="@color/widget_text_primary"
                 android:textSize="23sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
-        <View
+        <ImageView
             android:layout_width="1dp"
             android:layout_height="42dp"
             android:layout_marginHorizontal="12dp"
-            android:background="#FF434655" />
+            android:background="@color/widget_divider"
+            android:contentDescription="@null"
+            android:importantForAccessibility="no" />
 
         <LinearLayout
             android:layout_width="0dp"
@@ -62,7 +64,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="EUR"
-                android:textColor="#FFC3C6D7"
+                android:textColor="@color/widget_text_secondary"
                 android:textSize="12sp" />
             <TextView
                 android:id="@+id/widget_eur_rate"
@@ -71,7 +73,7 @@
                 android:ellipsize="end"
                 android:singleLine="true"
                 android:text="—"
-                android:textColor="#FFDAE2FD"
+                android:textColor="@color/widget_text_primary"
                 android:textSize="23sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -84,7 +86,7 @@
         android:ellipsize="end"
         android:singleLine="true"
         android:text="Abre Cuantoes para cargar tasas"
-        android:textColor="#FFC3C6D7"
+        android:textColor="@color/widget_text_secondary"
         android:textSize="11sp" />
     <TextView
         android:id="@+id/widget_source"
@@ -93,7 +95,7 @@
         android:ellipsize="end"
         android:singleLine="true"
         android:text="BCV · USD / EUR"
-        android:textColor="#FF8D90A0"
+        android:textColor="@color/widget_text_subtle"
         android:textSize="10sp" />
     <TextView
         android:id="@+id/widget_status"
@@ -102,6 +104,6 @@
         android:ellipsize="end"
         android:singleLine="true"
         android:text="Toca para consultar"
-        android:textColor="#FF68DBA9"
+        android:textColor="@color/widget_status"
         android:textSize="10sp" />
 </LinearLayout>

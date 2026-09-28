@@ -97,13 +97,14 @@ class ConversorViewmodel extends ChangeNotifier {
 
     try {
       final TasaBcv? tasa;
+      final ResultadoTasa? resultadoObtenido;
       if (fechaSolicitada != null) {
         tasa = await _repository.obtenerTasaHistorica(fechaSolicitada);
-        _resultadoTasa = null;
+        resultadoObtenido = null;
       } else {
         final resultado = await _repository.obtenerTasaConEstado();
         tasa = resultado.tasa;
-        _resultadoTasa = resultado;
+        resultadoObtenido = resultado;
       }
       if (!_sigueVigente(
         generacion: generacion,
@@ -111,6 +112,7 @@ class ConversorViewmodel extends ChangeNotifier {
       )) {
         return;
       }
+      _resultadoTasa = resultadoObtenido;
 
       if (tasa == null ||
           !tasa.esValida ||
@@ -282,17 +284,19 @@ class ConversorViewmodel extends ChangeNotifier {
     final generacion = ++_monedaGeneracion;
     final necesitaTasaActual =
         normalizada == 'USDT' && _fechaSeleccionada != null;
+    final necesitaCargaInicial = normalizada != 'USDT' && _tasa == null;
     _moneda = normalizada;
     if (necesitaTasaActual) _fechaSeleccionada = null;
     _errorUsdt = '';
+    if (normalizada != 'USDT') _cargandoUsdt = false;
     variacion = null;
     _limpiarResultado();
     _notificar();
 
-    if (necesitaTasaActual) {
+    if (necesitaTasaActual || necesitaCargaInicial) {
       await cargarTasa();
       if (!_sigueVigente(monedaGeneracion: generacion)) return;
-    } else {
+    } else if (normalizada != 'USDT') {
       await _calcularVariacion();
       if (!_sigueVigente(monedaGeneracion: generacion)) return;
     }
@@ -356,7 +360,7 @@ class ConversorViewmodel extends ChangeNotifier {
 
     if (_resultado.isNotEmpty) {
       _entrada = _resultado;
-      _entradaInterpretada = false;
+      _entradaInterpretada = true;
       entradaController.value = TextEditingValue(
         text: _resultado,
         selection: TextSelection.collapsed(offset: _resultado.length),
@@ -405,13 +409,15 @@ class ConversorViewmodel extends ChangeNotifier {
   }) async {
     final divisa = moneda.toUpperCase().trim();
     final esVes = const {'VES', 'BS', 'BS.'}.contains(divisa);
-    final esDivisaSoportada = const {
+    const monedasSoportadas = {
       'USD',
       r'US$',
       'EUR',
       '€',
       'USDT',
-    }.contains(divisa);
+    };
+    final esDivisaSoportada = monedasSoportadas.contains(divisa);
+    final fechaHistoricaAnterior = _fechaSeleccionada != null;
     final generacion = ++_monedaGeneracion;
 
     if (esVes) {
@@ -425,16 +431,13 @@ class ConversorViewmodel extends ChangeNotifier {
           _ => divisa,
         };
         _moneda = monedaNormalizada;
-        if (monedaNormalizada == 'USDT') {
-          final requiereActual = _fechaSeleccionada != null;
-          _fechaSeleccionada = null;
-          if (requiereActual || _tasa == null) await cargarTasa();
-          if (!_sigueVigente(monedaGeneracion: generacion)) return;
-          await _cargarUsdt(generacion);
-          if (!_sigueVigente(monedaGeneracion: generacion)) return;
-        }
       }
     }
+
+    if (_moneda == 'USDT') _fechaSeleccionada = null;
+    _cargandoUsdt = false;
+    _errorUsdt = '';
+    variacion = null;
 
     _entrada = monto;
     _entradaInterpretada = true;
@@ -444,6 +447,15 @@ class ConversorViewmodel extends ChangeNotifier {
     );
     convertir(notificar: false);
     _notificar();
+
+    final requiereTasaActual =
+        _tasa == null || (_moneda == 'USDT' && fechaHistoricaAnterior);
+    if (requiereTasaActual) unawaited(cargarTasa());
+    if (_moneda == 'USDT') {
+      unawaited(_cargarUsdt(generacion));
+    } else if (!requiereTasaActual) {
+      unawaited(_calcularVariacion());
+    }
   }
 
   void _limpiarResultado() {

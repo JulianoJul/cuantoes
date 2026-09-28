@@ -6,6 +6,80 @@ import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetProvider
+import org.json.JSONObject
+
+private data class NativeWidgetSnapshot(
+    val usd: String,
+    val eur: String,
+    val effectiveDate: String,
+    val validatedAt: String,
+    val source: String,
+    val status: String,
+    val validatedAtUtc: String?,
+)
+
+private object NativeWidgetSnapshotReader {
+    private const val KEY_PAYLOAD = "widget_snapshot_payload"
+    private const val KEY_VERSION = "widget_snapshot_version"
+    private const val VERSION = 2
+
+    // Compatibilidad con los valores publicados por la versión anterior.
+    private const val LEGACY_VERSION = 1
+    private const val KEY_USD = "widget_usd_rate"
+    private const val KEY_EUR = "widget_eur_rate"
+    private const val KEY_EFFECTIVE_DATE = "widget_effective_date"
+    private const val KEY_VALIDATED_AT = "widget_validated_at"
+    private const val KEY_SOURCE = "widget_source"
+    private const val KEY_STATUS = "widget_status"
+
+    fun read(data: android.content.SharedPreferences): NativeWidgetSnapshot? {
+        val payload = stringPreference(data, KEY_PAYLOAD)
+        if (!payload.isNullOrBlank()) {
+            val json = runCatching { JSONObject(payload) }.getOrNull()
+            if (json != null && json.optInt("version", 0) == VERSION) {
+                val usd = jsonString(json, "usd")
+                val eur = jsonString(json, "eur")
+                if (usd != null && eur != null) {
+                    return NativeWidgetSnapshot(
+                        usd = usd,
+                        eur = eur,
+                        effectiveDate = jsonString(json, "effectiveDate").orEmpty(),
+                        validatedAt = jsonString(json, "validatedAt").orEmpty(),
+                        source = jsonString(json, "source").orEmpty(),
+                        status = jsonString(json, "status").orEmpty(),
+                        validatedAtUtc = jsonString(json, "validatedAtUtc"),
+                    )
+                }
+            }
+        }
+
+        if (intPreference(data, KEY_VERSION) != LEGACY_VERSION) return null
+        val usd = stringPreference(data, KEY_USD) ?: return null
+        val eur = stringPreference(data, KEY_EUR) ?: return null
+        return NativeWidgetSnapshot(
+            usd = usd,
+            eur = eur,
+            effectiveDate = stringPreference(data, KEY_EFFECTIVE_DATE).orEmpty(),
+            validatedAt = stringPreference(data, KEY_VALIDATED_AT).orEmpty(),
+            source = stringPreference(data, KEY_SOURCE).orEmpty(),
+            status = stringPreference(data, KEY_STATUS).orEmpty(),
+            validatedAtUtc = null,
+        )
+    }
+
+    private fun jsonString(json: JSONObject, key: String): String? =
+        json.optString(key, "").takeIf { it.isNotBlank() }
+
+    private fun stringPreference(
+        data: android.content.SharedPreferences,
+        key: String,
+    ): String? = runCatching { data.getString(key, null) }.getOrNull()
+
+    private fun intPreference(
+        data: android.content.SharedPreferences,
+        key: String,
+    ): Int = runCatching { data.getInt(key, 0) }.getOrDefault(0)
+}
 
 class BcvWidgetProvider : HomeWidgetProvider() {
     override fun onUpdate(
@@ -14,28 +88,38 @@ class BcvWidgetProvider : HomeWidgetProvider() {
         appWidgetIds: IntArray,
         widgetData: android.content.SharedPreferences,
     ) {
+        val snapshot = NativeWidgetSnapshotReader.read(widgetData)
         appWidgetIds.forEach { widgetId ->
             val views = RemoteViews(context.packageName, R.layout.widget_bcv)
-            val hasSnapshot = widgetData.getInt(KEY_SNAPSHOT_VERSION, 0) == SNAPSHOT_VERSION
-            val usd = if (hasSnapshot) widgetData.getString(KEY_USD, null) else null
-            val eur = if (hasSnapshot) widgetData.getString(KEY_EUR, null) else null
-            val effectiveDate = if (hasSnapshot) widgetData.getString(KEY_EFFECTIVE_DATE, null) else null
-            val validatedAt = if (hasSnapshot) widgetData.getString(KEY_VALIDATED_AT, null) else null
-            val source = if (hasSnapshot) widgetData.getString(KEY_SOURCE, null) else null
-            val status = if (hasSnapshot) widgetData.getString(KEY_STATUS, null) else null
+            val usd = snapshot?.usd
+            val eur = snapshot?.eur
 
             views.setTextViewText(R.id.widget_usd_rate, usd?.let { "Bs. $it" } ?: "—")
             views.setTextViewText(R.id.widget_eur_rate, eur?.let { "Bs. $it" } ?: "—")
             views.setTextViewText(
                 R.id.widget_effective_date,
-                effectiveDate?.let { "Fecha efectiva · $it" } ?: "Abre Cuantoes para cargar tasas",
+                snapshot?.effectiveDate?.takeIf { it.isNotBlank() }
+                    ?.let { "Fecha efectiva · $it" } ?: "Abre Cuantoes para cargar tasas",
             )
-            views.setTextViewText(R.id.widget_source, source?.let { "Fuente · $it" } ?: "BCV · USD / EUR")
-            views.setTextViewText(R.id.widget_status, status ?: validatedAt ?: "Toca para consultar")
+            views.setTextViewText(
+                R.id.widget_source,
+                snapshot?.source?.takeIf { it.isNotBlank() }?.let { "Fuente · $it" }
+                    ?: "BCV · USD / EUR",
+            )
+            views.setTextViewText(
+                R.id.widget_status,
+                snapshot?.status?.takeIf { it.isNotBlank() }
+                    ?: snapshot?.validatedAt?.takeIf { it.isNotBlank() }
+                    ?: "Toca para consultar",
+            )
+            val validacion = snapshot?.validatedAtUtc?.let {
+                "Última validación UTC: $it. "
+            }.orEmpty()
             views.setContentDescription(
                 R.id.widget_root,
-                "Tasas BCV. Dólar: ${usd ?: "sin dato"} bolívares. Euro: ${eur ?: "sin dato"} bolívares. " +
-                    (effectiveDate ?: "Sin fecha efectiva"),
+                "Tasas BCV. Dólar: ${usd ?: "sin dato"} bolívares. " +
+                    "Euro: ${eur ?: "sin dato"} bolívares. " +
+                    (snapshot?.effectiveDate ?: "Sin fecha efectiva") + ". " + validacion,
             )
             views.setOnClickPendingIntent(R.id.widget_root, launchApp(context, widgetId))
             appWidgetManager.updateAppWidget(widgetId, views)
@@ -53,17 +137,6 @@ class BcvWidgetProvider : HomeWidgetProvider() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }
-
-    private companion object {
-        const val KEY_SNAPSHOT_VERSION = "widget_snapshot_version"
-        const val SNAPSHOT_VERSION = 1
-        const val KEY_USD = "widget_usd_rate"
-        const val KEY_EUR = "widget_eur_rate"
-        const val KEY_EFFECTIVE_DATE = "widget_effective_date"
-        const val KEY_VALIDATED_AT = "widget_validated_at"
-        const val KEY_SOURCE = "widget_source"
-        const val KEY_STATUS = "widget_status"
-    }
 }
 
 class BcvCompactWidgetProvider : HomeWidgetProvider() {
@@ -73,16 +146,15 @@ class BcvCompactWidgetProvider : HomeWidgetProvider() {
         appWidgetIds: IntArray,
         widgetData: android.content.SharedPreferences,
     ) {
+        val snapshot = NativeWidgetSnapshotReader.read(widgetData)
         appWidgetIds.forEach { widgetId ->
             val views = RemoteViews(context.packageName, R.layout.widget_bcv_compact)
-            val currency = widgetData.getString(KEY_COMPACT_CURRENCY, "USD")
-                ?.takeIf { it == "EUR" } ?: "USD"
-            val hasSnapshot = widgetData.getInt(KEY_SNAPSHOT_VERSION, 0) == SNAPSHOT_VERSION
-            val rate = if (hasSnapshot) {
-                widgetData.getString(if (currency == "EUR") KEY_EUR else KEY_USD, null)
-            } else null
-            val effectiveDate = if (hasSnapshot) widgetData.getString(KEY_EFFECTIVE_DATE, null) else null
-            val source = if (hasSnapshot) widgetData.getString(KEY_SOURCE, "BCV") else null
+            val currency = runCatching {
+                widgetData.getString(KEY_COMPACT_CURRENCY, "USD")
+            }.getOrNull()?.takeIf { it == "EUR" } ?: "USD"
+            val rate = if (currency == "EUR") snapshot?.eur else snapshot?.usd
+            val effectiveDate = snapshot?.effectiveDate?.takeIf { it.isNotBlank() }
+            val source = snapshot?.source?.takeIf { it.isNotBlank() } ?: "BCV"
 
             views.setTextViewText(R.id.widget_compact_currency, "$currency · BCV")
             views.setTextViewText(
@@ -113,12 +185,6 @@ class BcvCompactWidgetProvider : HomeWidgetProvider() {
     }
 
     private companion object {
-        const val KEY_SNAPSHOT_VERSION = "widget_snapshot_version"
-        const val SNAPSHOT_VERSION = 1
-        const val KEY_USD = "widget_usd_rate"
-        const val KEY_EUR = "widget_eur_rate"
-        const val KEY_EFFECTIVE_DATE = "widget_effective_date"
-        const val KEY_SOURCE = "widget_source"
         const val KEY_COMPACT_CURRENCY = "widget_compact_currency"
         const val REQUEST_CODE_OFFSET = 100_000
     }

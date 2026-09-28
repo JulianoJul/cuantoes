@@ -55,13 +55,17 @@ void main() {
     await tester.pumpWidget(const CuantoesApp());
     await tester.pump(const Duration(seconds: 2));
 
-    expect(find.text('Tasa BCV'), findsOneWidget);
+    expect(find.text('Cuantoes'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    await tester.tap(find.textContaining('1 USD = Bs.').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Tasa oficial BCV'), findsOneWidget);
     expect(find.textContaining('USD'), findsWidgets);
     expect(find.textContaining('EUR'), findsWidgets);
-    expect(find.text('1 = Bs. 72,50'), findsOneWidget);
-    expect(find.text('1 = Bs. 80,00'), findsOneWidget);
-    expect(find.text('1 = Bs. 172,50'), findsNothing);
-    expect(find.text('1 = Bs. 180,00'), findsNothing);
+    expect(find.text('1 = Bs. 72,5'), findsOneWidget);
+    expect(find.text('1 = Bs. 80'), findsOneWidget);
+    expect(find.text('1 = Bs. 172,5'), findsNothing);
+    expect(find.text('1 = Bs. 180'), findsNothing);
   });
 
   testWidgets('App muestra USDT', (WidgetTester tester) async {
@@ -84,7 +88,9 @@ void main() {
     await tester.pumpWidget(const CuantoesApp());
     await tester.pump(const Duration(seconds: 2));
 
-    expect(find.textContaining('USDT'), findsWidgets);
+    await tester.tap(find.byType(DropdownButton<String>).first);
+    await tester.pumpAndSettle();
+    expect(find.text('USDT · P2P'), findsOneWidget);
   });
 
   testWidgets('App maneja error de red', (WidgetTester tester) async {
@@ -93,7 +99,8 @@ void main() {
     await tester.pumpWidget(const CuantoesApp());
     await tester.pump(const Duration(seconds: 5));
 
-    expect(find.text('Tasa BCV'), findsOneWidget);
+    expect(find.text('Cuantoes'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
   });
 }
 

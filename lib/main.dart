@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'services/settings_provider.dart';
 import 'screens/conversor_screen.dart';
@@ -59,6 +60,18 @@ class CuantoesApp extends StatelessWidget {
                     surface: const Color(0xFFF8FAFC),
                   ),
               scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+              appBarTheme: const AppBarTheme(
+                backgroundColor: Color(0xFFF8FAFC),
+                foregroundColor: Color(0xFF142033),
+                surfaceTintColor: Colors.transparent,
+                systemOverlayStyle: SystemUiOverlayStyle(
+                  statusBarColor: Colors.transparent,
+                  statusBarIconBrightness: Brightness.dark,
+                  statusBarBrightness: Brightness.light,
+                  systemNavigationBarColor: Color(0xFFF8FAFC),
+                  systemNavigationBarIconBrightness: Brightness.dark,
+                ),
+              ),
               cardTheme: const CardThemeData(
                 color: Colors.white,
                 surfaceTintColor: Colors.transparent,
@@ -79,6 +92,18 @@ class CuantoesApp extends StatelessWidget {
                     outlineVariant: const Color(0xFF434655),
                   ),
               scaffoldBackgroundColor: const Color(0xFF0B1326),
+              appBarTheme: const AppBarTheme(
+                backgroundColor: Color(0xFF0B1326),
+                foregroundColor: Color(0xFFE2E7F2),
+                surfaceTintColor: Colors.transparent,
+                systemOverlayStyle: SystemUiOverlayStyle(
+                  statusBarColor: Colors.transparent,
+                  statusBarIconBrightness: Brightness.light,
+                  statusBarBrightness: Brightness.dark,
+                  systemNavigationBarColor: Color(0xFF0B1326),
+                  systemNavigationBarIconBrightness: Brightness.light,
+                ),
+              ),
               cardTheme: const CardThemeData(
                 color: Color(0xFF171F33),
                 surfaceTintColor: Colors.transparent,

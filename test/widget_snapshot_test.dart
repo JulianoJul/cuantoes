@@ -28,7 +28,7 @@ void main() {
     expect(snapshot.effectiveDate, '25/09/2026');
     expect(snapshot.validatedAt, 'Validada 27/09 13:00');
     expect(snapshot.source, 'DolarAPI');
-    expect(snapshot.status, contains('Actualizada'));
+    expect(snapshot.status, contains('Validada'));
   });
 
   test('snapshot advierte si conserva una tasa offline', () {
@@ -49,7 +49,7 @@ void main() {
     );
 
     final snapshot = WidgetSnapshot.fromResultadoTasa(resultado);
-    expect(snapshot.status, contains('Sin conexión'));
+    expect(snapshot.status, contains('No se pudo actualizar'));
     expect(snapshot.status, contains('tasa antigua'));
     expect(snapshot.validatedAt, 'Validación desconocida');
   });

@@ -1,32 +1,139 @@
 import 'dart:io';
+import 'dart:developer' as developer;
 import 'dart:ui' as ui;
 
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 
 import '../models/documento_ocr.dart';
 import '../utils/numeros_ocr.dart';
 
+enum OcrEtapa { lectura, decodificacion, reconocimiento, adaptacion }
+
+class OcrException implements Exception {
+  final OcrEtapa etapa;
+  final Object causa;
+
+  const OcrException({required this.etapa, required this.causa});
+
+  String get mensajeUsuario => switch (etapa) {
+    OcrEtapa.lectura => 'No se pudo abrir el archivo de imagen.',
+    OcrEtapa.decodificacion => 'El formato de esta imagen no se pudo procesar.',
+    OcrEtapa.reconocimiento => 'Falló el reconocimiento de texto en el dispositivo.',
+    OcrEtapa.adaptacion => 'Se reconoció la imagen, pero no se pudieron preparar sus regiones.',
+  };
+
+  String get detalleTecnico => switch (causa) {
+    PlatformException exception => 'PlatformException (${exception.code})',
+    FileSystemException exception =>
+      'FileSystemException (código ${exception.osError?.errorCode ?? 'desconocido'})',
+    _ => causa.runtimeType.toString(),
+  };
+
+  @override
+  String toString() => 'OcrException(${etapa.name}): $detalleTecnico';
+}
+
 class OcrService {
   const OcrService();
 
   Future<DocumentoOcr> reconocerDocumento(String rutaImagen) async {
-    final bytes = await File(rutaImagen).readAsBytes();
-    final codec = await ui.instantiateImageCodec(bytes);
-    final image = (await codec.getNextFrame()).image;
-    final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
+    final operacion = DateTime.now().microsecondsSinceEpoch;
+    final cronometro = Stopwatch()..start();
+    OcrEtapa etapa = OcrEtapa.lectura;
+    ui.Codec? codec;
+    ui.Image? image;
+    TextRecognizer? recognizer;
     try {
+      final archivo = File(rutaImagen);
+      if (!await archivo.exists()) {
+        throw const FileSystemException('El archivo seleccionado ya no existe');
+      }
+      final bytes = await archivo.readAsBytes();
+      if (bytes.isEmpty) {
+        throw const FormatException('El archivo seleccionado está vacío');
+      }
+
+      etapa = OcrEtapa.decodificacion;
+      final imageCodec = await ui.instantiateImageCodec(bytes);
+      codec = imageCodec;
+      final decodedImage = (await imageCodec.getNextFrame()).image;
+      image = decodedImage;
+
+      etapa = OcrEtapa.reconocimiento;
+      final textRecognizer = TextRecognizer(
+        script: TextRecognitionScript.latin,
+      );
+      recognizer = textRecognizer;
       final input = InputImage.fromFilePath(rutaImagen);
-      final reconocido = await recognizer.processImage(input);
-      return documentoDesdeResultado(
+      final reconocido = await textRecognizer.processImage(input);
+
+      etapa = OcrEtapa.adaptacion;
+      final documento = documentoDesdeResultado(
         rutaImagen: rutaImagen,
-        anchoImagen: image.width,
-        altoImagen: image.height,
+        anchoImagen: decodedImage.width,
+        altoImagen: decodedImage.height,
         reconocido: reconocido,
       );
+      developer.log(
+        'OCR completo id=$operacion bytes=${bytes.length} '
+        'imagen=${decodedImage.width}x${decodedImage.height} '
+        'regiones=${documento.regiones.length} '
+        'duracionMs=${cronometro.elapsedMilliseconds}',
+        name: 'cuantoes.ocr',
+      );
+      return documento;
+    } catch (error, stackTrace) {
+      final fallo = error is OcrException
+          ? error
+          : OcrException(etapa: etapa, causa: error);
+      developer.log(
+        'OCR fallido id=$operacion etapa=${fallo.etapa.name} '
+        'duracionMs=${cronometro.elapsedMilliseconds}',
+        name: 'cuantoes.ocr',
+        error: fallo.detalleTecnico,
+        stackTrace: StackTrace.fromString(
+          stackTrace.toString().replaceAll(rutaImagen, '<imagen>'),
+        ),
+        level: 1000,
+      );
+      Error.throwWithStackTrace(fallo, stackTrace);
     } finally {
-      image.dispose();
-      codec.dispose();
-      await recognizer.close();
+      try {
+        image?.dispose();
+      } catch (error, stackTrace) {
+        developer.log(
+          'No se pudo liberar la imagen decodificada id=$operacion',
+          name: 'cuantoes.ocr',
+          error: error,
+          stackTrace: stackTrace,
+          level: 900,
+        );
+      }
+      try {
+        codec?.dispose();
+      } catch (error, stackTrace) {
+        developer.log(
+          'No se pudo liberar el codec id=$operacion',
+          name: 'cuantoes.ocr',
+          error: error,
+          stackTrace: stackTrace,
+          level: 900,
+        );
+      }
+      try {
+        await recognizer?.close();
+      } catch (error, stackTrace) {
+        // Un fallo al liberar el detector no debe ocultar el error primario
+        // ni invalidar un resultado de OCR ya calculado.
+        developer.log(
+          'No se pudo cerrar el reconocedor id=$operacion',
+          name: 'cuantoes.ocr',
+          error: error,
+          stackTrace: stackTrace,
+          level: 900,
+        );
+      }
     }
   }
 
