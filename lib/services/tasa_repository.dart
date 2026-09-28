@@ -1,3 +1,5 @@
+import '../models/cotizacion_usdt.dart';
+import '../models/resultado_tasa.dart';
 import '../models/tasa_bcv.dart';
 import '../utils/feriados_ve.dart';
 import 'bcv_api_service.dart';
@@ -7,36 +9,54 @@ import 'bcv_today_service.dart';
 import 'chitty_bcv_service.dart';
 
 class TasaRepository {
+  static const _usdtTtl = Duration(hours: 1);
+  static const _refreshCooldown = Duration(minutes: 30);
+
   final List<BcvProvider> _providers;
   final BcvCacheService _cache;
   Future<TasaBcv>? _refreshEnCurso;
+  Future<CotizacionUsdt?>? _usdtEnCurso;
+  ResultadoTasa? _ultimoResultado;
 
   TasaRepository({
     List<BcvProvider>? providers,
     BcvProvider? api,
     BcvCacheService? cache,
-  }) : _providers = providers ?? <BcvProvider>[
-         api ?? DolarApiService(),
-         if (api == null) BcvTodayService(),
-         if (api == null) ChittyBcvService(),
-       ],
+  }) : _providers =
+           providers ??
+           <BcvProvider>[
+             api ?? DolarApiService(),
+             if (api == null) BcvTodayService(),
+             if (api == null) ChittyBcvService(),
+           ],
        _cache = cache ?? BcvCacheService();
 
   Future<TasaBcv> obtenerTasa() async {
     final ahora = ahoraVenezuela();
-    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
-
-    // Never use the latest cache entry blindly: it may be tomorrow's rate.
+    final hoy = _dia(ahora);
     final cacheActual = await _cache.obtenerTasaMasRecienteHasta(hoy);
     if (cacheActual != null && _esTasaVigente(cacheActual.fechaEfectiva)) {
+      await _actualizarResultado(cacheActual, desdeCache: true);
       return cacheActual;
     }
 
+    // A recent failed attempt should not trigger a network storm. A stale
+    // cached quote can still be returned as an explicitly degraded fallback.
     if (cacheActual != null) {
       final ultimaConsulta = await _cache.obtenerUltimaConsulta();
       if (ultimaConsulta != null) {
         final diff = DateTime.now().toUtc().difference(ultimaConsulta);
-        if (diff >= Duration.zero && diff < const Duration(minutes: 30)) {
+        if (diff >= Duration.zero && diff < _refreshCooldown) {
+          final validacion = await _cache.obtenerUltimaValidacionExitosa();
+          final falloReciente =
+              validacion == null || ultimaConsulta.isAfter(validacion);
+          await _actualizarResultado(
+            cacheActual,
+            desdeCache: true,
+            errorActualizacion: falloReciente
+                ? 'No se pudo confirmar una actualización reciente'
+                : null,
+          );
           return cacheActual;
         }
       }
@@ -45,9 +65,16 @@ class TasaRepository {
     return refrescarTasa();
   }
 
+  Future<ResultadoTasa> obtenerTasaConEstado() async {
+    final tasa = await obtenerTasa();
+    final resultado = _ultimoResultado;
+    if (resultado != null) return resultado;
+    return _crearResultado(tasa, desdeCache: false);
+  }
+
   Future<TasaBcv> refrescarTasa() async {
-    final refreshActivo = _refreshEnCurso;
-    if (refreshActivo != null) return refreshActivo;
+    final activo = _refreshEnCurso;
+    if (activo != null) return activo;
 
     final refresh = _refrescarTasa();
     _refreshEnCurso = refresh;
@@ -55,26 +82,61 @@ class TasaRepository {
       (_) {
         if (identical(_refreshEnCurso, refresh)) _refreshEnCurso = null;
       },
-      onError: (Object error) {
+      onError: (Object _) {
         if (identical(_refreshEnCurso, refresh)) _refreshEnCurso = null;
       },
     );
     return refresh;
   }
 
-  Future<TasaBcv> _refrescarTasa() async {
-    await _cache.registrarConsulta();
+  Future<ResultadoTasa> refrescarTasaConEstado() async {
+    final tasa = await refrescarTasa();
+    final resultado = _ultimoResultado;
+    if (resultado != null) return resultado;
+    return _crearResultado(tasa, desdeCache: false);
+  }
 
+  Future<TasaBcv> _refrescarTasa() async {
+    // Cache persistence must not prevent network access.
+    try {
+      await _cache.registrarConsulta();
+    } catch (_) {}
+
+    final hoy = _dia(ahoraVenezuela());
+    TasaBcv? mejorActual;
+    var mejorActualDesdeRed = false;
     Object? primerError;
     StackTrace? primerStackTrace;
 
     for (final provider in _providers) {
       try {
-        var tasa = await provider.obtenerTasa();
-        tasa = await _aplicarHeuristicaFecha(tasa, provider);
-        await _cache.guardarTasa(tasa);
-        final actual = await _tasaActualPostRefresh(tasa);
-        if (actual != null) return actual;
+        final recibida = await provider.obtenerTasa();
+        if (!recibida.esValida) {
+          throw FormatException(
+            '${provider.nombre} devolvió valores inválidos',
+          );
+        }
+
+        await _guardarSinBloquear(recibida);
+        if (_dia(recibida.fechaEfectiva).isAfter(hoy)) {
+          await _obtenerSiguiente(provider);
+          final historica = await _historicaSegura(provider, hoy);
+          final mejor = _mayorFecha(mejorActual, historica, hoy);
+          if (identical(mejor, historica)) mejorActualDesdeRed = true;
+          mejorActual = mejor;
+          // A future realtime value does not satisfy a current-rate request.
+          // Continue through the remaining providers before falling back.
+          continue;
+        }
+
+        final mejor = _mayorFecha(mejorActual, recibida, hoy);
+        if (identical(mejor, recibida)) mejorActualDesdeRed = true;
+        mejorActual = mejor;
+        await _obtenerSiguiente(provider);
+
+        // Nothing can be newer than today's effective date without being a
+        // future rate. Preserve the configured provider priority for this tie.
+        if (_dia(recibida.fechaEfectiva).isAtSameMomentAs(hoy)) break;
       } catch (error, stackTrace) {
         primerError ??= error;
         primerStackTrace ??= stackTrace;
@@ -82,170 +144,214 @@ class TasaRepository {
     }
 
     final cacheActual = await _cacheActual();
-    if (cacheActual != null) return cacheActual;
+    mejorActual = _mayorFecha(mejorActual, cacheActual, hoy);
+    if (mejorActual != null) {
+      final esRed = mejorActualDesdeRed && !identical(mejorActual, cacheActual);
+      if (esRed) {
+        try {
+          await _cache.registrarValidacionExitosa();
+        } catch (_) {}
+      }
+      await _actualizarResultado(
+        mejorActual,
+        desdeCache: !esRed,
+        errorActualizacion: esRed ? null : primerError?.toString(),
+      );
+      return mejorActual;
+    }
 
     if (primerError != null && primerStackTrace != null) {
       Error.throwWithStackTrace(primerError, primerStackTrace);
     }
-
     throw StateError('Ningún proveedor devolvió una tasa efectiva');
   }
 
-  /// Selects the greatest effective entry that is not after today.
-  Future<TasaBcv?> _tasaActualPostRefresh(TasaBcv tasa) async {
-    final ahora = ahoraVenezuela();
-    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
-    final cacheActual = await _cache.obtenerTasaMasRecienteHasta(hoy);
-    final ef = _dia(tasa.fechaEfectiva);
-
-    if (ef.isAfter(hoy)) return cacheActual;
-    if (cacheActual == null) return tasa;
-
-    return ef.isBefore(_dia(cacheActual.fechaEfectiva)) ? cacheActual : tasa;
+  Future<void> _obtenerSiguiente(BcvProvider provider) async {
+    try {
+      final siguiente = await provider.obtenerTasaSiguiente();
+      if (siguiente != null &&
+          siguiente.esValida &&
+          _dia(siguiente.fechaEfectiva).isAfter(_dia(ahoraVenezuela()))) {
+        await _guardarSinBloquear(siguiente);
+      }
+    } catch (_) {
+      // A missing optional next rate must not invalidate today's quote.
+    }
   }
 
-  Future<TasaBcv> _aplicarHeuristicaFecha(
-    TasaBcv nuevaTasa,
+  Future<TasaBcv?> _historicaSegura(
     BcvProvider provider,
+    DateTime fecha,
   ) async {
-    final ahora = ahoraVenezuela();
-    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
-    var cache = await _cache.obtenerTasaMasRecienteHasta(hoy);
-
-    // If a fresh install receives a future rate, recover today's last
-    // effective rate so the future value is never shown as current.
-    if (cache == null && _dia(nuevaTasa.fechaEfectiva).isAfter(hoy)) {
-      try {
-        final historica = await provider.obtenerTasaHistorica(hoy);
-        if (historica != null && !_dia(historica.fechaEfectiva).isAfter(hoy)) {
-          cache = historica;
-          await _cache.guardarTasa(historica);
-        }
-      } catch (_) {
-        // The realtime result can still be used if no historical result exists.
+    try {
+      final tasa = await provider.obtenerTasaHistorica(fecha);
+      if (tasa == null ||
+          !tasa.esValida ||
+          _dia(tasa.fechaEfectiva).isAfter(fecha)) {
+        return null;
       }
+      await _guardarSinBloquear(tasa);
+      return tasa;
+    } catch (_) {
+      return null;
     }
+  }
 
-    if (cache == null) return nuevaTasa;
+  TasaBcv? _mayorFecha(TasaBcv? primera, TasaBcv? segunda, DateTime limite) {
+    if (primera == null) return _esHasta(segunda, limite) ? segunda : null;
+    if (segunda == null || !_esHasta(segunda, limite)) return primera;
+    return _dia(segunda.fechaEfectiva).isAfter(_dia(primera.fechaEfectiva))
+        ? segunda
+        : primera;
+  }
 
-    // If both values are unchanged, BCV has not published a new effective rate.
-    // Keep the cached entry instead of rewriting today's key with future data.
-    final diffUsd = (nuevaTasa.usd - cache.usd).abs();
-    final diffEur = (nuevaTasa.eur - cache.eur).abs();
-    if (diffUsd < 0.00001 &&
-        diffEur < 0.00001 &&
-        _dia(nuevaTasa.fechaEfectiva).isAfter(hoy)) {
-      return cache;
+  bool _esHasta(TasaBcv? tasa, DateTime limite) =>
+      tasa != null &&
+      tasa.esValida &&
+      !_dia(tasa.fechaEfectiva).isAfter(_dia(limite));
+
+  Future<void> _guardarSinBloquear(TasaBcv tasa) async {
+    try {
+      await _cache.guardarTasa(tasa);
+    } catch (_) {
+      // A valid network result remains usable if local storage is unavailable.
     }
-    return nuevaTasa;
   }
 
   Future<TasaBcv?> obtenerTasaHistorica(DateTime fecha) async {
-    final ef = _dia(fecha);
-
-    final cacheExacta = await _cache.obtenerTasaPorFecha(ef);
+    final limite = _dia(fecha);
+    final cacheExacta = await _cache.obtenerTasaPorFecha(limite);
     if (cacheExacta != null) return cacheExacta;
 
-    TasaBcv? desdeProveedor;
+    TasaBcv? mejor;
     for (final provider in _providers) {
       try {
-        final tasa = await provider.obtenerTasaHistorica(fecha);
-        if (tasa != null && !_dia(tasa.fechaEfectiva).isAfter(ef)) {
-          await _cache.guardarTasa(tasa);
-          desdeProveedor = tasa;
-          break;
-        }
+        final tasa = await provider.obtenerTasaHistorica(limite);
+        if (tasa == null || !tasa.esValida || !_esHasta(tasa, limite)) continue;
+        await _guardarSinBloquear(tasa);
+        mejor = _mayorFecha(mejor, tasa, limite);
+        if (_dia(tasa.fechaEfectiva).isAtSameMomentAs(limite)) break;
       } catch (_) {
-        // Prueba el siguiente proveedor.
+        // Continue through providers; a sparse earlier result is not final.
       }
     }
 
-    // La API puede no tener la fecha efectiva más cercana (histórico
-    // incompleto); la caché de tiempo real suele estar más completa.
-    final cachePrevia = await _cache.obtenerTasaMasRecienteMenorQue(ef);
-    if (desdeProveedor == null) return cachePrevia;
-    if (cachePrevia == null) return desdeProveedor;
-
-    return _dia(desdeProveedor.fechaEfectiva).isBefore(
-          _dia(cachePrevia.fechaEfectiva),
-        )
-        ? cachePrevia
-        : desdeProveedor;
+    final cachePrevia = await _cache.obtenerTasaMasRecienteHasta(limite);
+    return _mayorFecha(mejor, cachePrevia, limite);
   }
 
   Future<TasaBcv?> obtenerTasaAnterior(DateTime fechaLimite) async {
     final limite = _dia(fechaLimite);
-    final fechaAnterior = _diaHabilAnterior(limite);
-    final cacheAnterior = await _cache.obtenerTasaPorFecha(fechaAnterior);
-    if (cacheAnterior != null) return cacheAnterior;
-
-    TasaBcv? desdeProveedor;
-    for (final provider in _providers) {
-      try {
-        final tasa = await provider.obtenerTasaAnterior(fechaLimite);
-        if (tasa != null && _dia(tasa.fechaEfectiva).isBefore(limite)) {
-          await _cache.guardarTasa(tasa);
-          desdeProveedor = tasa;
-          break;
-        }
-      } catch (_) {
-        // Prueba el siguiente proveedor.
-      }
+    final cacheAnterior = await _cache.obtenerTasaMasRecienteMenorQue(limite);
+    final diaHabilPrevio = _diaHabilAnterior(limite);
+    if (cacheAnterior != null &&
+        _dia(cacheAnterior.fechaEfectiva).isAtSameMomentAs(diaHabilPrevio)) {
+      return cacheAnterior;
     }
 
-    final cachePrevia = await _cache.obtenerTasaMasRecienteMenorQue(limite);
-    if (desdeProveedor == null) return cachePrevia;
-    if (cachePrevia == null) return desdeProveedor;
-
-    return _dia(desdeProveedor.fechaEfectiva).isBefore(
-          _dia(cachePrevia.fechaEfectiva),
-        )
-        ? cachePrevia
-        : desdeProveedor;
-  }
-
-  Future<double?> obtenerUsdt() async {
+    TasaBcv? mejor = cacheAnterior;
     for (final provider in _providers) {
       try {
-        final usdt = await provider.obtenerUsdt();
-        if (usdt != null && usdt > 0) return usdt;
+        final tasa = await provider.obtenerTasaAnterior(limite);
+        if (tasa == null ||
+            !tasa.esValida ||
+            !_dia(tasa.fechaEfectiva).isBefore(limite)) {
+          continue;
+        }
+        await _guardarSinBloquear(tasa);
+        mejor = _mayorFecha(
+          mejor,
+          tasa,
+          limite.subtract(const Duration(days: 1)),
+        );
       } catch (_) {
-        // Prueba el siguiente proveedor.
+        // A failed history source does not prevent use of the cache.
       }
+    }
+    return mejor;
+  }
+
+  Future<CotizacionUsdt?> obtenerCotizacionUsdt({bool forzar = false}) async {
+    final activo = _usdtEnCurso;
+    if (activo != null) return activo;
+
+    final cache = await _cache.obtenerCotizacionUsdt();
+    final ahora = DateTime.now().toUtc();
+    if (!forzar && cache != null) {
+      final antiguedad = ahora.difference(cache.obtenidaEnUtc);
+      if (antiguedad >= Duration.zero && antiguedad < _usdtTtl) return cache;
+    }
+
+    final request = _obtenerCotizacionUsdt(cache);
+    _usdtEnCurso = request;
+    request.then<void>(
+      (_) {
+        if (identical(_usdtEnCurso, request)) _usdtEnCurso = null;
+      },
+      onError: (Object _) {
+        if (identical(_usdtEnCurso, request)) _usdtEnCurso = null;
+      },
+    );
+    return request;
+  }
+
+  Future<CotizacionUsdt?> _obtenerCotizacionUsdt(CotizacionUsdt? cache) async {
+    for (final provider in _providers) {
+      try {
+        final quote = await provider.obtenerCotizacionUsdt();
+        if (quote == null || !quote.esValida) continue;
+        try {
+          await _cache.guardarCotizacionUsdt(quote);
+        } catch (_) {}
+        return quote;
+      } catch (_) {
+        // Try the next source and preserve the last persisted P2P quote.
+      }
+    }
+    return cache;
+  }
+
+  Future<double?> obtenerUsdt() async => (await obtenerCotizacionUsdt())?.valor;
+
+  Future<TasaBcv?> obtenerTasaSiguiente() async {
+    final ahora = ahoraVenezuela();
+    final hoy = _dia(ahora);
+    final siguienteCache = await _cache.obtenerTasaSiguiente(hoy);
+    if (siguienteCache != null) return siguienteCache;
+
+    for (final provider in _providers) {
+      try {
+        final siguiente = await provider.obtenerTasaSiguiente();
+        if (siguiente == null ||
+            !siguiente.esValida ||
+            !_dia(siguiente.fechaEfectiva).isAfter(hoy)) {
+          continue;
+        }
+        await _guardarSinBloquear(siguiente);
+        return siguiente;
+      } catch (_) {}
     }
     return null;
   }
 
-  /// Returns the closest cached future rate without making it current.
-  Future<TasaBcv?> obtenerTasaSiguiente() async {
-    final ahora = ahoraVenezuela();
-    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
-    return _cache.obtenerTasaSiguiente(hoy);
-  }
-
-  /// Verifica si existe una tasa con fechaEfectiva posterior a hoy en cache.
-  Future<bool> existeTasaSiguiente() async {
-    return await obtenerTasaSiguiente() != null;
-  }
+  Future<bool> existeTasaSiguiente() async =>
+      await obtenerTasaSiguiente() != null;
 
   bool _esTasaVigente(DateTime fechaEfectiva) {
-    final ahora = ahoraVenezuela();
-    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
-    final efectiva = _dia(fechaEfectiva);
-
-    if (efectiva.isAfter(hoy)) return false;
-    if (efectiva.isBefore(hoy)) return _esDiaNoHabil(hoy);
-
-    return _esDiaNoHabil(hoy) || ahora.hour < 14;
+    final hoy = _dia(ahoraVenezuela());
+    return _dia(fechaEfectiva).isAtSameMomentAs(_ultimaFechaHabil(hoy));
   }
 
-  DateTime _diaHabilAnterior(DateTime fecha) {
-    var anterior = DateTime(fecha.year, fecha.month, fecha.day - 1);
-    while (_esDiaNoHabil(anterior)) {
-      anterior = DateTime(anterior.year, anterior.month, anterior.day - 1);
+  DateTime _ultimaFechaHabil(DateTime hoy) {
+    var dia = _dia(hoy);
+    while (_esDiaNoHabil(dia)) {
+      dia = dia.subtract(const Duration(days: 1));
     }
-    return anterior;
+    return dia;
   }
+
+  DateTime _diaHabilAnterior(DateTime fecha) =>
+      _ultimaFechaHabil(_dia(fecha).subtract(const Duration(days: 1)));
 
   bool _esDiaNoHabil(DateTime fecha) {
     final dia = _dia(fecha);
@@ -255,9 +361,46 @@ class TasaRepository {
   }
 
   Future<TasaBcv?> _cacheActual() async {
-    final ahora = ahoraVenezuela();
-    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
+    final hoy = _dia(ahoraVenezuela());
     return _cache.obtenerTasaMasRecienteHasta(hoy);
+  }
+
+  Future<void> _actualizarResultado(
+    TasaBcv tasa, {
+    required bool desdeCache,
+    String? errorActualizacion,
+  }) async {
+    _ultimoResultado = await _crearResultado(
+      tasa,
+      desdeCache: desdeCache,
+      errorActualizacion: errorActualizacion,
+    );
+  }
+
+  Future<ResultadoTasa> _crearResultado(
+    TasaBcv tasa, {
+    required bool desdeCache,
+    String? errorActualizacion,
+  }) async {
+    DateTime? ultimaValidacion;
+    DateTime? ultimoIntento;
+    try {
+      ultimaValidacion = await _cache.obtenerUltimaValidacionExitosa();
+      ultimoIntento = await _cache.obtenerUltimaConsulta();
+    } catch (_) {}
+    final estado = _esTasaVigente(tasa.fechaEfectiva)
+        ? EstadoFrescuraTasa.vigente
+        : EstadoFrescuraTasa.antigua;
+    return ResultadoTasa(
+      tasa: tasa,
+      modoObtencion: desdeCache
+          ? ModoObtencionTasa.cache
+          : ModoObtencionTasa.red,
+      ultimaValidacionExitosaUtc: ultimaValidacion,
+      ultimoIntentoUtc: ultimoIntento,
+      frescura: estado,
+      errorActualizacion: errorActualizacion,
+    );
   }
 
   DateTime _dia(DateTime fecha) => DateTime(fecha.year, fecha.month, fecha.day);

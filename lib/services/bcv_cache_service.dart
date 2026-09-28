@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/tasa_bcv.dart';
+import '../models/cotizacion_usdt.dart';
 import '../utils/feriados_ve.dart';
 
 class BcvCacheService {
@@ -13,9 +14,7 @@ class BcvCacheService {
 
   bool _esFechaEfectivaLaboral(DateTime fecha) {
     final dia = _dia(fecha);
-    return dia.weekday != DateTime.saturday &&
-        dia.weekday != DateTime.sunday &&
-        !esFeriadoBancario(dia);
+    return dia.weekday != DateTime.saturday && dia.weekday != DateTime.sunday;
   }
 
   Future<List<TasaBcv>> _obtenerTasas() async {
@@ -24,12 +23,18 @@ class BcvCacheService {
 
     for (final key in prefs.getKeys()) {
       if (!key.startsWith(_keyPrefix)) continue;
-      final data = prefs.getString(key);
+      String? data;
+      try {
+        data = prefs.getString(key);
+      } on TypeError {
+        continue;
+      }
       if (data == null) continue;
 
       try {
         final json = jsonDecode(data) as Map<String, dynamic>;
-        tasas.add(TasaBcv.fromJson(json));
+        final tasa = TasaBcv.fromJson(json);
+        if (tasa.esValida) tasas.add(tasa);
       } on FormatException {
         // Ignore corrupted cache entries and keep usable rates available.
       } on TypeError {
@@ -109,13 +114,19 @@ class BcvCacheService {
 
   Future<TasaBcv?> obtenerTasaPorFecha(DateTime fecha) async {
     final prefs = await SharedPreferences.getInstance();
-    final data = prefs.getString(_keyFecha(fecha));
+    String? data;
+    try {
+      data = prefs.getString(_keyFecha(fecha));
+    } on TypeError {
+      return null;
+    }
     if (data == null) return null;
 
     try {
       final json = jsonDecode(data) as Map<String, dynamic>;
       final tasa = TasaBcv.fromJson(json);
-      return _esFechaEfectivaLaboral(tasa.fechaEfectiva) &&
+      return tasa.esValida &&
+              _esFechaEfectivaLaboral(tasa.fechaEfectiva) &&
               _dia(tasa.fechaEfectiva) == _dia(fecha)
           ? tasa
           : null;
@@ -127,6 +138,7 @@ class BcvCacheService {
   }
 
   Future<void> guardarTasa(TasaBcv tasa) async {
+    if (!tasa.esValida) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       _keyFecha(tasa.fechaEfectiva),
@@ -134,11 +146,44 @@ class BcvCacheService {
     );
   }
 
+  static const _keyUsdt = 'cuantoes_usdt_cache_v1';
+
+  Future<CotizacionUsdt?> obtenerCotizacionUsdt() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? data;
+    try {
+      data = prefs.getString(_keyUsdt);
+    } on TypeError {
+      return null;
+    }
+    if (data == null) return null;
+    try {
+      final decoded = jsonDecode(data) as Map<String, dynamic>;
+      final quote = CotizacionUsdt.fromJson(decoded);
+      return quote.esValida ? quote : null;
+    } on FormatException {
+      return null;
+    } on TypeError {
+      return null;
+    }
+  }
+
+  Future<void> guardarCotizacionUsdt(CotizacionUsdt quote) async {
+    if (!quote.esValida) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyUsdt, jsonEncode(quote.toJson()));
+  }
+
   static const _keyUltimaConsulta = 'ultima_consulta_api';
 
   Future<DateTime?> obtenerUltimaConsulta() async {
     final prefs = await SharedPreferences.getInstance();
-    final epoch = prefs.getInt(_keyUltimaConsulta);
+    int? epoch;
+    try {
+      epoch = prefs.getInt(_keyUltimaConsulta);
+    } on TypeError {
+      return null;
+    }
     if (epoch == null) return null;
     return DateTime.fromMillisecondsSinceEpoch(epoch, isUtc: true);
   }
@@ -148,6 +193,28 @@ class BcvCacheService {
     await prefs.setInt(
       _keyUltimaConsulta,
       DateTime.now().toUtc().millisecondsSinceEpoch,
+    );
+  }
+
+  static const _keyUltimaValidacion = 'ultima_validacion_tasa_exitosa_v1';
+
+  Future<DateTime?> obtenerUltimaValidacionExitosa() async {
+    final prefs = await SharedPreferences.getInstance();
+    int? epoch;
+    try {
+      epoch = prefs.getInt(_keyUltimaValidacion);
+    } on TypeError {
+      return null;
+    }
+    if (epoch == null) return null;
+    return DateTime.fromMillisecondsSinceEpoch(epoch, isUtc: true);
+  }
+
+  Future<void> registrarValidacionExitosa([DateTime? fechaUtc]) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(
+      _keyUltimaValidacion,
+      (fechaUtc ?? DateTime.now().toUtc()).toUtc().millisecondsSinceEpoch,
     );
   }
 }

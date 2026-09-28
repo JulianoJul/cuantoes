@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_bcv_name">Cuantoes · Tasas BCV</string>
+    <string name="widget_bcv_description">Tasas oficiales USD y EUR, fecha efectiva y estado de actualización.</string>
+    <string name="widget_bcv_compact_name">Cuantoes · Tasa compacta</string>
+    <string name="widget_bcv_compact_description">Una tasa BCV compacta. Configura USD o EUR desde Cuantoes.</string>
+</resources>

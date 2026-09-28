@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/tasa_bcv.dart';
+import '../models/cotizacion_usdt.dart';
 import 'bcv_provider.dart';
 
 /// Cliente de BCV Today, una API estática servida por GitHub Pages/CDN.
@@ -33,11 +34,20 @@ class BcvTodayService implements BcvProvider {
   Future<TasaBcv?> obtenerTasaAnterior(DateTime fechaLimite) async {
     final limite = _dia(fechaLimite);
     final inicio = limite.subtract(const Duration(days: 1));
-    return _buscarSnapshot(inicio, limite: limite.subtract(const Duration(days: 1)));
+    return _buscarSnapshot(
+      inicio,
+      limite: limite.subtract(const Duration(days: 1)),
+    );
   }
 
   @override
   Future<double?> obtenerUsdt() async => null;
+
+  @override
+  Future<TasaBcv?> obtenerTasaSiguiente() async => null;
+
+  @override
+  Future<CotizacionUsdt?> obtenerCotizacionUsdt() async => null;
 
   Future<TasaBcv?> _buscarSnapshot(
     DateTime fechaInicio, {
@@ -72,10 +82,7 @@ class BcvTodayService implements BcvProvider {
       throw FormatException('$nombre no devolvió USD y EUR válidos');
     }
 
-    final fechaEfectiva = _fecha(
-          map['effective_date'],
-        ) ??
-        _fecha(map['date']);
+    final fechaEfectiva = _fecha(map['effective_date']) ?? _fecha(map['date']);
     final fecha = _fecha(map['updated_at']) ?? fechaEfectiva;
     if (fechaEfectiva == null || fecha == null) {
       throw FormatException('$nombre no devolvió una fecha válida');
@@ -88,6 +95,7 @@ class BcvTodayService implements BcvProvider {
       fecha: fecha,
       origen: 'bcv_today',
       fechaEfectiva: _dia(fechaEfectiva),
+      fechaEfectivaExplicita: map['effective_date'] != null,
     );
   }
 

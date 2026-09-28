@@ -9,6 +9,11 @@
 | `TasaBcv.fechaEfectiva` | — | Campo almacenado de fecha efectiva BCV; su resolución depende del origen de la tasa |
 | `TasaBcv.actual()` | — | Factory: crea TasaBcv con fechaEfectiva calculada desde hora actual Venezuela (UTC-4) |
 | `TasaBcv.toJson()` / `fromJson()` | — | Serialización JSON |
+| `CotizacionUsdt` | `valor`, `fechaEfectiva`, `obtenidaEnUtc`, `origen` | Referencia P2P independiente de USD/EUR oficial |
+| `ResultadoTasa` | `tasa`, `modoObtencion`, validación, intento, frescura | Resultado de repositorio con metadatos para UI/widgets |
+| `DocumentoOcr` / `RegionOcr` | IDs, texto, bloques/líneas y geometría | Documento de OCR con cada región seleccionable |
+| `TransferenciaOcr` | `monto`, `moneda` | Transferencia confirmada desde el flujo OCR al conversor |
+| `WidgetSnapshot` | USD/EUR formateados, fecha, fuente, estado | Contrato compartido versionado con RemoteViews Android |
 
 ## Servicios
 
@@ -29,8 +34,17 @@
 | `BcvCacheService.obtenerTasaPorFecha(fecha)` | Lee tasa cacheada para una fecha efectiva específica |
 | `BcvCacheService.guardarTasa(tasa)` | Guarda tasa en SharedPreferences |
 | `BcvCacheService.obtenerUltimaConsulta()` / `registrarConsulta()` | Lee o registra la hora de la última consulta a la API |
-| `OcrService.reconocerTexto(rutaImagen)` | Reconoce texto de una imagen con ML Kit (script Latin, on-device) |
+| `BcvCacheService.obtenerCotizacionUsdt()` / `guardarCotizacionUsdt()` | Lee y persiste USDT separado de la tasa oficial |
+| `BcvCacheService.obtenerUltimaValidacionExitosa()` / `registrarValidacionExitosa()` | Metadatos de frescura para tasas recibidas por red |
+| `OcrService.reconocerDocumento(rutaImagen)` | Reconoce texto Latin local y conserva dimensiones, líneas, palabras y geometría |
+| `OcrService.documentoDesdeResultado(...)` | Adapta un `RecognizedText` de ML Kit a `DocumentoOcr` |
+| `OcrService.reconocerTexto(rutaImagen)` | Compatibilidad: retorna texto plano de la imagen reconocida |
+| `HomeWidgetService.publicar(resultado)` | Persiste snapshot versionado y actualiza las instancias RemoteViews |
+| `HomeWidgetService.actualizarMonedaCompacta(moneda)` | Persiste USD/EUR y redibuja el widget compacto |
+| `WidgetBackgroundRefresh.inicializarYProgramar()` | Inicializa WorkManager y registra refresco horario si hay widgets instalados |
+| `WidgetBackgroundRefresh.actualizarProgramacion()` | Programa o cancela el trabajo según widgets detectados en Android |
 | `TasaRepository.obtenerTasa()` | Orquestador: cache → refrescarTasa |
+| `TasaRepository.obtenerTasaConEstado()` / `refrescarTasaConEstado()` | Retorna tasa con metadatos de fuente, caché y frescura |
 | `TasaRepository.refrescarTasa()` | Fuerza actualización: DolarAPI → BCV Today → Chitty BCV → cache; una tasa futura nunca se devuelve como actual |
 | `TasaRepository.obtenerTasaHistorica(fecha)` | Histórico: cache exacta → proveedores con histórico → cache previa; conserva la fecha solicitada en la UI |
 | `TasaRepository.obtenerTasaAnterior(fechaLimite)` | Obtiene la tasa de la fecha efectiva inmediatamente anterior: cache → proveedores con histórico |
@@ -40,6 +54,7 @@
 | `SettingsProvider.isAutomaticComma` | Getter: indica si el modo de coma automática está activo |
 | `SettingsProvider.toggleDarkMode()` | Método: alterna el modo oscuro y lo persiste |
 | `SettingsProvider.toggleAutomaticComma()` | Método: alterna el modo de coma automática y lo persiste |
+| `SettingsProvider.compactWidgetCurrency` / `setCompactWidgetCurrency()` | Moneda compacta USD/EUR, persistida para ajustes de la app |
 
 ## ViewModel
 
@@ -59,6 +74,8 @@
 | `ConversorViewmodel.toggleDireccion()` | Invierte dirección, resultado (2 decimales) → entrada |
 | `ConversorViewmodel.convertir()` | Convierte según dirección y moneda |
 | `ConversorViewmodel.dispose()` | Libera `entradaController` |
+| `ConversorViewmodel.aplicarMontoEscaneado(monto, moneda)` | Aplica monto OCR, moneda y dirección de entrada en una operación |
+| `ConversorViewmodel.onRateAvailable` | Callback opcional para publicar una tasa actualizada en el snapshot Android |
 
 ## Utils
 
@@ -70,8 +87,9 @@
 | `calcularFechaEfectiva(fecha)` | Calcula fecha efectiva BCV: hora ≥ 14 → +1 día → próximo día hábil |
 | `fechaEfectivaActual()` | Fecha efectiva actual según hora Venezuela (UTC-4) |
 | `AutomaticCommaFormatter` | Formateador de texto que desplaza decimales al escribir (ej: 15 -> 0,15) si está activo |
-| `extraerNumeros(texto)` | Extrae números de un texto OCR sin repetidos, con su token original |
+| `extraerNumeros(texto)` | Extrae apariciones OCR en orden, conserva repetidos/offsets y sugiere moneda contextual |
 | `parsearNumero(token)` | Parsea un token numérico en formato venezolano o inglés (`1.234,56`, `848,5458`, `10.50`) |
+| `OcrCoordinateMapper.mapearRectangulo(region)` / `aCoordenadasImagen(punto)` | Mapea entre píxeles OCR y el canvas BoxFit.contain |
 
 ## Enums
 

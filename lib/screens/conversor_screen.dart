@@ -1,30 +1,106 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'camera_capture_screen.dart';
+import 'ocr_selection_screen.dart';
+import '../models/documento_ocr.dart';
+import '../services/tasa_repository.dart';
 import '../viewmodels/conversor_viewmodel.dart';
 import '../services/settings_provider.dart';
-import '../services/ocr_service.dart';
+import '../services/home_widget_service.dart';
+import '../services/widget_background_refresh.dart';
 import '../utils/automatic_comma_formatter.dart';
 import '../utils/feriados_ve.dart';
-import '../utils/numeros_ocr.dart';
+import '../models/resultado_tasa.dart';
 
 class ConversorScreen extends StatelessWidget {
-  const ConversorScreen({super.key});
+  final TasaRepository? repository;
+  final Future<void> Function(ResultadoTasa resultado)? onTasaActualizada;
+
+  const ConversorScreen({super.key, this.repository, this.onTasaActualizada});
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => ConversorViewmodel()..cargarTasa(),
+      create: (_) => ConversorViewmodel(
+        repository: repository,
+        onRateAvailable: onTasaActualizada,
+      )..cargarTasa(),
       child: const _ConversorBody(),
     );
   }
 }
 
-class _ConversorBody extends StatelessWidget {
+class _ConversorBody extends StatefulWidget {
   const _ConversorBody();
+
+  @override
+  State<_ConversorBody> createState() => _ConversorBodyState();
+}
+
+class _ConversorBodyState extends State<_ConversorBody>
+    with WidgetsBindingObserver {
+  bool _lostDataCheckScheduled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(
+        WidgetBackgroundRefresh.actualizarProgramacion().catchError(
+          (Object _) {},
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_lostDataCheckScheduled) return;
+    _lostDataCheckScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _recuperarImagenPerdida(),
+    );
+  }
+
+  Future<void> _recuperarImagenPerdida() async {
+    try {
+      final perdida = await ImagePicker().retrieveLostData();
+      if (!mounted || perdida.isEmpty) return;
+      final archivos = perdida.files;
+      final imagen =
+          perdida.file ??
+          (archivos != null && archivos.isNotEmpty ? archivos.last : null);
+      if (imagen == null) {
+        _mostrarMensaje('No se pudo recuperar la imagen elegida');
+        return;
+      }
+      await _abrirSeleccionOcr(imagen.path, context.read<ConversorViewmodel>());
+    } catch (_) {
+      // retrieveLostData is Android-specific; other platforms return no recovery.
+    }
+  }
+
+  void _mostrarMensaje(String texto) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(texto)));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +113,7 @@ class _ConversorBody extends StatelessWidget {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.transparent,
+        title: const Text('Cuantoes'),
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu),
@@ -46,27 +123,36 @@ class _ConversorBody extends StatelessWidget {
       ),
       drawer: _buildDrawer(context, vm, settings),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          child: Column(
-            children: [
-              _buildHeader(),
-              const SizedBox(height: 12),
-              _buildSelectorMoneda(context, vm),
-              const SizedBox(height: 8),
-              _buildSelectorFecha(context, vm, dateFormatter),
-              const SizedBox(height: 20),
-              _buildEntrada(context, vm, settings),
-              const SizedBox(height: 20),
-              _buildSwapButton(vm),
-              const SizedBox(height: 20),
-              _buildResultado(vm, formatter),
-              const SizedBox(height: 16),
-              _buildEstadoBcv(context, vm, formatter),
-              const Spacer(),
-              _buildBotonRecargar(vm),
-              const SizedBox(height: 12),
-            ],
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildHeader(),
+                  const SizedBox(height: 12),
+                  _buildEstadoBcv(context, vm, formatter),
+                  const SizedBox(height: 16),
+                  _buildSelectorMoneda(context, vm),
+                  const SizedBox(height: 8),
+                  _buildSelectorFecha(context, vm, dateFormatter),
+                  const SizedBox(height: 12),
+                  _buildEntrada(context, vm, settings),
+                  const SizedBox(height: 8),
+                  Center(child: _buildSwapButton(vm)),
+                  const SizedBox(height: 8),
+                  _buildResultado(context, vm, formatter),
+                  const SizedBox(height: 8),
+                  _buildAtajos(vm),
+                  const SizedBox(height: 16),
+                  _buildEstadoObtencion(context, vm),
+                  const SizedBox(height: 8),
+                  _buildBotonRecargar(vm),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -119,6 +205,23 @@ class _ConversorBody extends StatelessWidget {
             },
             secondary: const Icon(Icons.edit_note),
           ),
+          ListTile(
+            leading: const Icon(Icons.widgets_outlined),
+            title: const Text('Widget compacto'),
+            subtitle: const Text('Moneda mostrada en el widget pequeño'),
+            trailing: DropdownButton<String>(
+              value: settings.compactWidgetCurrency,
+              items: const [
+                DropdownMenuItem(value: 'USD', child: Text('USD')),
+                DropdownMenuItem(value: 'EUR', child: Text('EUR')),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                settings.setCompactWidgetCurrency(value);
+                unawaited(HomeWidgetService().actualizarMonedaCompacta(value));
+              },
+            ),
+          ),
           const Spacer(),
           Padding(padding: const EdgeInsets.all(16.0), child: _buildOrigen(vm)),
           const SizedBox(height: 12),
@@ -141,13 +244,13 @@ class _ConversorBody extends StatelessWidget {
   }
 
   Widget _buildSelectorMoneda(BuildContext context, ConversorViewmodel vm) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 8,
+      runSpacing: 4,
       children: [
         _chipMoneda(context, vm, 'USD'),
-        const SizedBox(width: 8),
         _chipMoneda(context, vm, 'EUR'),
-        const SizedBox(width: 8),
         _chipMoneda(context, vm, 'USDT'),
       ],
     );
@@ -160,7 +263,7 @@ class _ConversorBody extends StatelessWidget {
   ) {
     final selected = vm.moneda == moneda;
     return ChoiceChip(
-      label: Text(moneda),
+      label: Text(moneda == 'USDT' ? 'USDT · P2P' : '$moneda · BCV'),
       selected: selected,
       onSelected: (_) => vm.setMoneda(moneda),
       selectedColor: Theme.of(context).colorScheme.primaryContainer,
@@ -189,9 +292,7 @@ class _ConversorBody extends StatelessWidget {
       label = _formatearEtiqueta(ef, formatter);
     }
 
-    final mostrarVolver =
-        vm.fechaSeleccionada != null &&
-        _soloFecha(vm.fechaSeleccionada!).isBefore(hoy);
+    final mostrarVolver = vm.fechaSeleccionada != null;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -205,10 +306,16 @@ class _ConversorBody extends StatelessWidget {
                 icon: const Icon(Icons.today, size: 20),
                 tooltip: 'Volver a hoy',
               ),
-            TextButton.icon(
-              onPressed: () => _abrirCalendario(context, vm),
-              icon: const Icon(Icons.calendar_today, size: 18),
-              label: Text(label),
+            Flexible(
+              child: TextButton.icon(
+                onPressed: () => _abrirCalendario(context, vm),
+                icon: const Icon(Icons.calendar_today, size: 18),
+                label: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ),
           ],
         ),
@@ -261,12 +368,13 @@ class _ConversorBody extends StatelessWidget {
           onChanged: vm.setEntrada,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           inputFormatters: [
-            AutomaticCommaFormatter(active: settings.isAutomaticComma),
-            if (!settings.isAutomaticComma)
+            if (settings.isAutomaticComma && !vm.entradaInterpretada)
+              AutomaticCommaFormatter(active: true)
+            else
               TextInputFormatter.withFunction((oldValue, newValue) {
                 final text = newValue.text;
                 if (text.isEmpty) return newValue;
-                if (RegExp(r'^\d*([,.]\d{0,2})?$').hasMatch(text)) {
+                if (RegExp(r'^\d*([,.]\d{0,4})?$').hasMatch(text)) {
                   return newValue;
                 }
                 return oldValue;
@@ -277,11 +385,20 @@ class _ConversorBody extends StatelessWidget {
           decoration: InputDecoration(
             labelText: vm.cargandoUsdt ? 'Cargando USDT...' : vm.labelOrigen,
             border: const OutlineInputBorder(),
-            suffixIcon: IconButton(
-              tooltip: 'Escanear precio',
-              icon: const Icon(Icons.document_scanner_outlined),
-              onPressed: () => _escanearPrecio(context, vm),
-            ),
+            suffixIcon: vm.entrada.isEmpty
+                ? IconButton(
+                    tooltip: 'Escanear precio',
+                    icon: const Icon(Icons.document_scanner_outlined),
+                    onPressed: () => _escanearPrecio(context, vm),
+                  )
+                : IconButton(
+                    tooltip: 'Limpiar monto',
+                    icon: const Icon(Icons.clear),
+                    onPressed: () {
+                      vm.entradaController.clear();
+                      vm.setEntrada('');
+                    },
+                  ),
           ),
         ),
       ),
@@ -336,51 +453,35 @@ class _ConversorBody extends StatelessWidget {
         return;
       }
     }
-    if (ruta == null || !context.mounted) return;
+    if (ruta == null || !mounted) return;
+    await _abrirSeleccionOcr(ruta, vm);
+  }
 
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
+  Future<void> _abrirSeleccionOcr(String ruta, ConversorViewmodel vm) async {
+    final transferencia = await Navigator.push<TransferenciaOcr>(
+      context,
+      MaterialPageRoute(builder: (_) => OcrSelectionScreen(rutaImagen: ruta)),
     );
-
-    String texto;
-    try {
-      texto = await OcrService().reconocerTexto(ruta);
-    } catch (_) {
-      texto = '';
-    } finally {
-      if (context.mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-    }
-    if (!context.mounted) return;
-
-    if (texto.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se detectó texto en la imagen')),
-      );
-      return;
-    }
-
-    final seleccionado = await showDialog<String>(
-      context: context,
-      builder: (_) => _OcrDialog(texto: texto, numeros: extraerNumeros(texto)),
+    if (!mounted || transferencia == null) return;
+    await vm.aplicarMontoEscaneado(
+      monto: transferencia.monto,
+      moneda: transferencia.moneda,
     );
-    if (seleccionado == null) return;
-
-    vm.entradaController.text = seleccionado;
-    vm.setEntrada(seleccionado);
   }
 
   Widget _buildSwapButton(ConversorViewmodel vm) {
     return IconButton.filled(
-      onPressed: vm.tasa != null ? vm.toggleDireccion : null,
+      onPressed: vm.tasaActual > 0 ? vm.toggleDireccion : null,
+      tooltip: 'Intercambiar moneda de entrada y resultado',
       icon: const Icon(Icons.swap_vert),
     );
   }
 
-  Widget _buildResultado(ConversorViewmodel vm, NumberFormat formatter) {
+  Widget _buildResultado(
+    BuildContext context,
+    ConversorViewmodel vm,
+    NumberFormat formatter,
+  ) {
     if (vm.resultado.isEmpty) {
       return Text(
         vm.labelDestino,
@@ -412,14 +513,19 @@ class _ConversorBody extends StatelessWidget {
             ),
             IconButton(
               icon: const Icon(Icons.copy, size: 18),
-              onPressed: () {
+              onPressed: () async {
                 final prefix = vm.esMonedaAVes ? 'Bs. ' : '${vm.moneda} ';
-                Clipboard.setData(
+                await Clipboard.setData(
                   ClipboardData(
                     text:
                         '$prefix${formatter.format(double.parse(vm.resultado.replaceAll(',', '.')))}',
                   ),
                 );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Resultado copiado')),
+                  );
+                }
               },
               visualDensity: VisualDensity.compact,
               tooltip: 'Copiar resultado',
@@ -447,63 +553,150 @@ class _ConversorBody extends StatelessWidget {
     NumberFormat formatter,
   ) {
     final dateFormatter = DateFormat('dd/MM/yyyy');
-
-    switch (vm.estado) {
-      case EstadoTasa.cargando:
+    final tasa = vm.tasa;
+    if (tasa == null) {
+      if (vm.estado == EstadoTasa.cargando) {
         return const SizedBox(
-          height: 60,
+          height: 88,
           child: Center(child: CircularProgressIndicator()),
         );
-      case EstadoTasa.error:
-        return SizedBox(
-          height: 60,
+      }
+      return Card.outlined(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, color: Colors.red, size: 20),
-              const SizedBox(height: 4),
+              const Icon(Icons.cloud_off_outlined),
+              const SizedBox(height: 8),
               Text(
-                vm.error,
-                style: const TextStyle(color: Colors.red, fontSize: 12),
-                textAlign: TextAlign.center,
+                vm.error.isEmpty
+                    ? 'No hay tasas disponibles'
+                    : 'No se pudo cargar la tasa',
+              ),
+              TextButton.icon(
+                onPressed: vm.refrescarTasa,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Reintentar'),
               ),
             ],
           ),
-        );
-      case EstadoTasa.listo:
-        final t = vm.tasa!;
-        final fechaAplicada = vm.fechaEfectivaAplicada ?? t.fechaEfectiva;
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primaryContainer,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            children: [
-              _rateLine(formatter, vm, 'USD', t.usd),
-              const SizedBox(height: 4),
-              _rateLine(formatter, vm, 'EUR', t.eur),
-              if (t.usdt > 0) ...[
-                const SizedBox(height: 4),
-                _rateLine(formatter, vm, 'USDT', t.usdt),
-              ],
-              const SizedBox(height: 6),
-              Text(
-                vm.fechaSeleccionada != null
-                    ? 'Tasa aplicada: ${dateFormatter.format(fechaAplicada)}'
-                    : dateFormatter.format(fechaAplicada),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onPrimaryContainer.withValues(alpha: 0.6),
-                ),
-              ),
-            ],
-          ),
-        );
+        ),
+      );
     }
+
+    final fechaAplicada = vm.fechaEfectivaAplicada ?? tasa.fechaEfectiva;
+    final nombresOrigen = {
+      'dolarapi': 'DolarAPI',
+      'bcv_today': 'BCV Today',
+      'chitty_bcv': 'Chitty BCV',
+    };
+    return Card.outlined(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.account_balance_outlined,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Tasa oficial BCV',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                Text(
+                  nombresOrigen[tasa.origen] ?? tasa.origen,
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+              ],
+            ),
+            const Divider(height: 20),
+            _rateLine(formatter, vm, 'USD', tasa.usd),
+            const SizedBox(height: 8),
+            _rateLine(formatter, vm, 'EUR', tasa.eur),
+            const SizedBox(height: 12),
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              children: [
+                Text(
+                  vm.fechaSeleccionada == null
+                      ? 'Fecha valor: ${dateFormatter.format(fechaAplicada)}'
+                      : 'Solicitada: ${dateFormatter.format(vm.fechaSeleccionada!)} · aplicada: ${dateFormatter.format(fechaAplicada)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                if (vm.tasaSiguienteDisponible && vm.fechaTasaSiguiente != null)
+                  Text(
+                    'Próxima: ${dateFormatter.format(vm.fechaTasaSiguiente!)}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+              ],
+            ),
+            if (vm.moneda == 'USDT') ...[
+              const Divider(height: 24),
+              _buildEstadoUsdt(context, vm, formatter, dateFormatter),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEstadoUsdt(
+    BuildContext context,
+    ConversorViewmodel vm,
+    NumberFormat formatter,
+    DateFormat dateFormatter,
+  ) {
+    final cotizacion = vm.cotizacionUsdt;
+    if (cotizacion == null) {
+      return Row(
+        children: [
+          const Expanded(child: Text('Referencia USDT · P2P')),
+          if (vm.cargandoUsdt)
+            const SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            Text(
+              vm.errorUsdt.isEmpty ? 'Sin dato' : 'No disponible',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+        ],
+      );
+    }
+    final age = DateTime.now().toUtc().difference(cotizacion.obtenidaEnUtc);
+    final ageLabel = age.inMinutes < 1
+        ? 'ahora'
+        : age.inHours < 1
+        ? 'hace ${age.inMinutes} min'
+        : 'hace ${age.inHours} h';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            const Expanded(child: Text('USDT · Referencia P2P')),
+            Text('1 = Bs. ${formatter.format(cotizacion.valor)}'),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${cotizacion.origen} · promedio ${dateFormatter.format(cotizacion.fechaEfectiva)} · consultado $ageLabel',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        if (vm.cargandoUsdt) const LinearProgressIndicator(minHeight: 2),
+      ],
+    );
   }
 
   Widget _rateLine(
@@ -520,17 +713,18 @@ class _ConversorBody extends StatelessWidget {
       variacionColor = v >= 0 ? Colors.green : Colors.red;
     }
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 8,
+      runSpacing: 4,
       children: [
         Text(
           moneda,
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
         ),
-        const SizedBox(width: 4),
         Text('1 = Bs. ${formatter.format(valor)}'),
         if (variacionStr != null) ...[
-          const SizedBox(width: 8),
           Text(
             variacionStr,
             style: TextStyle(fontSize: 11, color: variacionColor),
@@ -569,9 +763,65 @@ class _ConversorBody extends StatelessWidget {
 
   Widget _buildBotonRecargar(ConversorViewmodel vm) {
     return TextButton.icon(
-      onPressed: () => vm.refrescarTasa(),
+      onPressed: vm.moneda == 'USDT' ? vm.refrescarUsdt : vm.refrescarTasa,
       icon: const Icon(Icons.refresh, size: 18),
-      label: const Text('Actualizar tasa'),
+      label: Text(
+        vm.moneda == 'USDT' ? 'Actualizar referencia USDT' : 'Actualizar tasa',
+      ),
+    );
+  }
+
+  Widget _buildAtajos(ConversorViewmodel vm) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      alignment: WrapAlignment.center,
+      children: [
+        for (final monto in const [1, 10, 50, 100])
+          OutlinedButton(
+            onPressed: () => vm.setEntrada('$monto'),
+            child: Text('$monto ${vm.labelOrigen}'),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildEstadoObtencion(BuildContext context, ConversorViewmodel vm) {
+    final resultado = vm.resultadoTasa;
+    if (vm.error.isEmpty && resultado == null) return const SizedBox.shrink();
+    final validacion = resultado?.ultimaValidacionExitosaUtc;
+    final edad = validacion == null
+        ? null
+        : DateTime.now().toUtc().difference(validacion).inMinutes;
+    final falloActualizacion = resultado?.errorActualizacion != null;
+    final mensaje = vm.error.isNotEmpty || falloActualizacion
+        ? resultado?.frescura == EstadoFrescuraTasa.antigua
+              ? 'No se pudo actualizar · se conserva una tasa antigua; verifica su fecha efectiva.'
+              : 'No se pudo actualizar · se conserva la última tasa disponible.'
+        : resultado?.frescura == EstadoFrescuraTasa.antigua
+        ? 'La fecha efectiva disponible es antigua; revisa antes de usarla.'
+        : resultado?.vieneDeCache == true
+        ? edad == null || edad < 0
+              ? 'Tasa guardada · última validación desconocida'
+              : edad < 1
+              ? 'Tasa guardada · validada hace menos de 1 min'
+              : 'Tasa guardada · validada hace $edad min'
+        : '';
+    if (mensaje.isEmpty) return const SizedBox.shrink();
+    return Semantics(
+      liveRegion: true,
+      child: Text(
+        mensaje,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color:
+              vm.error.isNotEmpty ||
+                  falloActualizacion ||
+                  resultado?.frescura == EstadoFrescuraTasa.antigua
+              ? Theme.of(context).colorScheme.error
+              : Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
     );
   }
 
@@ -615,116 +865,4 @@ class _ConversorBody extends StatelessWidget {
 
   bool _esMismaFecha(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
-}
-
-class _OcrDialog extends StatefulWidget {
-  final String texto;
-  final List<NumeroDetectado> numeros;
-
-  const _OcrDialog({required this.texto, required this.numeros});
-
-  @override
-  State<_OcrDialog> createState() => _OcrDialogState();
-}
-
-class _OcrDialogState extends State<_OcrDialog> {
-  late final TextEditingController _controller;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.texto);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _usarSeleccion() {
-    final seleccion = _controller.selection;
-    final texto = seleccion.isValid && !seleccion.isCollapsed
-        ? _controller.text.substring(seleccion.start, seleccion.end)
-        : _controller.text;
-    final valor = parsearNumero(texto);
-    if (valor == null) {
-      setState(() => _error = 'Selecciona un número válido del texto');
-      return;
-    }
-    Navigator.pop(context, _formatoEntrada(valor));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Texto detectado'),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: _controller,
-                readOnly: true,
-                maxLines: 6,
-                minLines: 3,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  hintText: 'Mantén presionado para seleccionar el número',
-                ),
-              ),
-              if (widget.numeros.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  'Números detectados',
-                  style: Theme.of(context).textTheme.labelLarge,
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    for (final numero in widget.numeros.take(12))
-                      ActionChip(
-                        label: Text(numero.texto),
-                        onPressed: () => Navigator.pop(
-                          context,
-                          _formatoEntrada(numero.valor),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-              if (_error != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _error!,
-                  style: const TextStyle(color: Colors.red, fontSize: 12),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: _usarSeleccion,
-          child: const Text('Usar selección'),
-        ),
-      ],
-    );
-  }
-}
-
-String _formatoEntrada(double valor) {
-  final texto = valor.toStringAsFixed(4).replaceFirst(RegExp(r'\.?0+$'), '');
-  return texto.replaceAll('.', ',');
 }

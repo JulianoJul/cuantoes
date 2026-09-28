@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/tasa_bcv.dart';
+import '../models/cotizacion_usdt.dart';
 import '../utils/feriados_ve.dart';
 import 'bcv_provider.dart';
 
@@ -19,6 +20,7 @@ class ChittyBcvService implements BcvProvider {
   static const _venezuelaOffset = Duration(hours: 4);
 
   final http.Client _client;
+  TasaBcv? _siguiente;
 
   ChittyBcvService({http.Client? client}) : _client = client ?? http.Client();
 
@@ -38,10 +40,19 @@ class ChittyBcvService implements BcvProvider {
       throw FormatException('$nombre no devolvió USD y EUR válidos');
     }
 
-    final fechaActualizacion = _fecha(map['updated_at']) ?? DateTime.now();
-    final fechaEfectiva = _fecha(map['effective_date']) ??
-        _fecha(map['fecha']) ??
-        _ultimoDiaHabil(_enVenezuela(fechaActualizacion));
+    final fechaActualizacion = _fecha(map['updated_at']);
+    final fechaEfectivaDeclarada =
+        _fecha(map['effective_date']) ?? _fecha(map['fecha']);
+    final fechaEfectiva =
+        fechaEfectivaDeclarada ??
+        (fechaActualizacion == null
+            ? null
+            : _ultimoDiaHabil(_enVenezuela(fechaActualizacion)));
+    if (fechaEfectiva == null || fechaActualizacion == null) {
+      throw FormatException('$nombre no devolvió fechas válidas');
+    }
+
+    _siguiente = _leerTasaAdelantada(map);
 
     return TasaBcv(
       usd: usd,
@@ -50,8 +61,12 @@ class ChittyBcvService implements BcvProvider {
       fecha: fechaActualizacion,
       origen: 'chitty_bcv',
       fechaEfectiva: _dia(fechaEfectiva),
+      fechaEfectivaExplicita: fechaEfectivaDeclarada != null,
     );
   }
+
+  @override
+  Future<TasaBcv?> obtenerTasaSiguiente() async => _siguiente;
 
   @override
   Future<TasaBcv?> obtenerTasaHistorica(DateTime fecha) async => null;
@@ -61,6 +76,12 @@ class ChittyBcvService implements BcvProvider {
 
   @override
   Future<double?> obtenerUsdt() async {
+    final quote = await obtenerCotizacionUsdt();
+    return quote?.valor;
+  }
+
+  @override
+  Future<CotizacionUsdt?> obtenerCotizacionUsdt() async {
     final decoded = await _obtenerJson(Uri.parse(_p2pHistoryUrl));
     if (decoded is! Map) return null;
 
@@ -87,7 +108,36 @@ class ChittyBcvService implements BcvProvider {
       }
     }
 
-    return tasaElegida;
+    if (tasaElegida == null || fechaElegida == null) return null;
+    return CotizacionUsdt(
+      valor: tasaElegida,
+      fechaEfectiva: _dia(fechaElegida),
+      obtenidaEnUtc: DateTime.now().toUtc(),
+      origen: 'chitty_bcv_p2p',
+    );
+  }
+
+  TasaBcv? _leerTasaAdelantada(Map<String, dynamic> map) {
+    final adelantada = map['adelantada'];
+    if (adelantada is! Map) return null;
+    final tasas = adelantada.map(
+      (key, value) => MapEntry(key.toString(), value),
+    );
+    final usd = _numero(tasas['usd']);
+    final eur = _numero(tasas['eur']);
+    final fecha = _fecha(tasas['aplica_desde']);
+    if (usd == null || eur == null || fecha == null || usd <= 0 || eur <= 0) {
+      return null;
+    }
+    return TasaBcv(
+      usd: usd,
+      eur: eur,
+      usdt: 0,
+      fecha: _fecha(tasas['scrapeada_en']) ?? fecha,
+      origen: 'chitty_bcv',
+      fechaEfectiva: _dia(fecha),
+      fechaEfectivaExplicita: true,
+    );
   }
 
   Future<Map<String, dynamic>> _obtenerMapa(Uri uri) async {

@@ -18,6 +18,8 @@ void main() {
   test('un separador único con 3 dígitos se interpreta como miles', () {
     expect(parsearNumero('1.234'), 1234);
     expect(parsearNumero('1,234'), 1234);
+    expect(extraerNumeros('Total 1,234').single.separadorAmbiguo, isTrue);
+    expect(extraerNumeros('Total 0,125').single.separadorAmbiguo, isFalse);
   });
 
   test('ignora texto sin números válidos', () {
@@ -25,14 +27,16 @@ void main() {
     expect(extraerNumeros('Precio total'), isEmpty);
   });
 
-  test('extrae números en orden, sin repetidos y con su token original', () {
+  test('extrae apariciones en orden y conserva tokens repetidos', () {
     final numeros = extraerNumeros('Bs. 848,5458 y USD 10.50; repetido 10,50');
 
-    expect(numeros.length, 2);
+    expect(numeros.length, 3);
     expect(numeros[0].texto, '848,5458');
     expect(numeros[0].valor, closeTo(848.5458, 0.0001));
+    expect(numeros[0].monedaSugerida, 'VES');
     expect(numeros[1].texto, '10.50');
     expect(numeros[1].valor, 10.5);
+    expect(numeros[2].valor, 10.5);
   });
 
   test('extrae números de un texto multilínea tipo captura', () {
@@ -42,9 +46,26 @@ void main() {
       EUR 1 = Bs. 974,4191
     ''');
 
-    expect(numeros.length, 3);
+    expect(numeros.length, 4);
     expect(numeros[0].valor, 1);
     expect(numeros[1].valor, closeTo(848.5458, 0.0001));
-    expect(numeros[2].valor, closeTo(974.4191, 0.0001));
+    expect(numeros[2].valor, 1);
+    expect(numeros[3].valor, closeTo(974.4191, 0.0001));
+  });
+
+  test('no une candidatos separados por espacios', () {
+    final numeros = extraerNumeros('10 20');
+    expect(numeros.map((numero) => numero.valor), [10, 20]);
+  });
+
+  test('rechaza signos negativos y agrupaciones inválidas', () {
+    expect(parsearNumero('-10'), isNull);
+    expect(parsearNumero('12,34,56'), isNull);
+    expect(parsearNumero('1,23456'), isNull);
+    expect(extraerNumeros('-10'), isEmpty);
+  });
+
+  test('acepta decimales pequeños con tres posiciones', () {
+    expect(parsearNumero('0,125'), 0.125);
   });
 }

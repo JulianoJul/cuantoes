@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
+
+import '../models/cotizacion_usdt.dart';
+import '../models/resultado_tasa.dart';
 import '../models/tasa_bcv.dart';
-import '../services/tasa_repository.dart';
 import '../services/feriados_service.dart';
+import '../services/tasa_repository.dart';
 import '../utils/feriados_ve.dart';
 
 enum ConversionDireccion { monedaAVes, vesAMoneda }
@@ -10,36 +15,46 @@ enum EstadoTasa { cargando, listo, error }
 
 class ConversorViewmodel extends ChangeNotifier {
   final TasaRepository _repository;
+  final Future<void> Function(ResultadoTasa resultado)? onRateAvailable;
   final entradaController = TextEditingController();
   int _cargaGeneracion = 0;
   int _monedaGeneracion = 0;
+  bool _disposed = false;
 
   TasaBcv? _tasa;
+  ResultadoTasa? _resultadoTasa;
   EstadoTasa _estado = EstadoTasa.cargando;
   bool _cargandoUsdt = false;
   String _error = '';
+  String _errorUsdt = '';
+  CotizacionUsdt? _cotizacionUsdt;
   ConversionDireccion _direccion = ConversionDireccion.monedaAVes;
   String _entrada = '';
   String _resultado = '';
   String _resultadoPreciso = '';
   String _moneda = 'USD';
   DateTime? _fechaSeleccionada;
+  bool _entradaInterpretada = false;
 
-  ConversorViewmodel({TasaRepository? repository})
-    : _repository = repository ?? TasaRepository();
+  ConversorViewmodel({TasaRepository? repository, this.onRateAvailable})
+    : _repository = repository ?? TasaRepository(),
+      super();
 
   TasaBcv? get tasa => _tasa;
+  ResultadoTasa? get resultadoTasa => _resultadoTasa;
   EstadoTasa get estado => _estado;
   String get error => _error;
+  String get errorUsdt => _errorUsdt;
   ConversionDireccion get direccion => _direccion;
   String get entrada => _entrada;
   String get resultado => _resultado;
   String get resultadoPreciso => _resultadoPreciso;
   String get moneda => _moneda;
   bool get cargandoUsdt => _cargandoUsdt;
-  bool get entradaBloqueada => _cargandoUsdt;
+  bool get entradaBloqueada => false;
+  bool get entradaInterpretada => _entradaInterpretada;
+  CotizacionUsdt? get cotizacionUsdt => _cotizacionUsdt;
   DateTime? get fechaSeleccionada => _fechaSeleccionada;
-
   bool get esMonedaAVes => _direccion == ConversionDireccion.monedaAVes;
 
   bool _tasaSiguienteDisponible = false;
@@ -48,8 +63,7 @@ class ConversorViewmodel extends ChangeNotifier {
   DateTime? _fechaTasaSiguiente;
   DateTime? get fechaTasaSiguiente => _fechaTasaSiguiente;
 
-  /// Mayor fecha elegible en el calendario: la fecha efectiva de la próxima
-  /// tasa ya publicada, o hoy en Venezuela si aún no existe.
+  /// Mayor fecha elegible: próxima tasa publicada o hoy en Venezuela.
   DateTime get fechaMaximaSeleccionable {
     final ahora = ahoraVenezuela();
     final hoy = DateTime(ahora.year, ahora.month, ahora.day);
@@ -58,117 +72,155 @@ class ConversorViewmodel extends ChangeNotifier {
     return hoy;
   }
 
-  double get tasaActual => _tasa?.de(_moneda) ?? 0;
+  double get tasaActual => _moneda == 'USDT'
+      ? (_cotizacionUsdt?.valor ?? 0)
+      : (_tasa?.de(_moneda) ?? 0);
+
   double? variacion;
 
   DateTime? get fechaEfectivaAplicada => _tasa?.fechaEfectiva;
-
-  bool get _necesitaUsdt =>
-      _moneda == 'USDT' && (_tasa == null || _tasa!.usdt == 0);
 
   String get labelOrigen => esMonedaAVes ? _moneda : 'Bolívares (VES)';
   String get labelDestino => esMonedaAVes ? 'Bolívares (VES)' : _moneda;
 
   Future<void> cargarTasa() async {
     final generacion = ++_cargaGeneracion;
+    final monedaGeneracion = _monedaGeneracion;
     final fechaSolicitada = _fechaSeleccionada;
 
-    _estado = EstadoTasa.cargando;
+    if (_tasa == null) _estado = EstadoTasa.cargando;
     _error = '';
     _tasaSiguienteDisponible = false;
     _fechaTasaSiguiente = null;
     variacion = null;
-    notifyListeners();
+    _notificar();
 
     try {
-      final tasa = fechaSolicitada != null
-          ? await _repository.obtenerTasaHistorica(fechaSolicitada)
-          : await _repository.obtenerTasa();
-      if (_cargaGeneracion != generacion) return;
-
-      if (tasa == null ||
-          (fechaSolicitada != null &&
-              _fechaDia(tasa.fechaEfectiva).isAfter(fechaSolicitada))) {
-        _tasa = null;
-        _resultado = '';
-        _resultadoPreciso = '';
-        _estado = EstadoTasa.error;
-        _error = 'Sin datos para esta fecha';
-        notifyListeners();
+      final TasaBcv? tasa;
+      if (fechaSolicitada != null) {
+        tasa = await _repository.obtenerTasaHistorica(fechaSolicitada);
+        _resultadoTasa = null;
+      } else {
+        final resultado = await _repository.obtenerTasaConEstado();
+        tasa = resultado.tasa;
+        _resultadoTasa = resultado;
+      }
+      if (!_sigueVigente(
+        generacion: generacion,
+        monedaGeneracion: monedaGeneracion,
+      )) {
         return;
       }
 
-      // El histórico no incluye USDT. Conservamos un valor USDT ya cargado
-      // mientras reemplazamos únicamente las tasas BCV.
-      final usdt = tasa.usdt > 0 ? tasa.usdt : (_tasa?.usdt ?? 0);
-      _tasa = usdt == tasa.usdt
-          ? tasa
-          : TasaBcv(
-              usd: tasa.usd,
-              eur: tasa.eur,
-              usdt: usdt,
-              fecha: tasa.fecha,
-              origen: tasa.origen,
-              fechaEfectiva: tasa.fechaEfectiva,
-            );
+      if (tasa == null ||
+          !tasa.esValida ||
+          (fechaSolicitada != null &&
+              _fechaDia(tasa.fechaEfectiva).isAfter(fechaSolicitada))) {
+        _error = 'Sin datos para esta fecha';
+        if (fechaSolicitada != null) _tasa = null;
+        _estado = _tasa == null ? EstadoTasa.error : EstadoTasa.listo;
+        _limpiarResultado();
+        _notificar();
+        return;
+      }
 
-      final siguiente = await _repository.obtenerTasaSiguiente();
-      if (_cargaGeneracion != generacion) return;
-      _fechaTasaSiguiente = siguiente?.fechaEfectiva;
-      _tasaSiguienteDisponible = fechaSolicitada == null && siguiente != null;
-
-      // Sincronizamos feriados de Google en segundo plano.
-      FeriadosService.sincronizar();
-
+      _tasa = tasa;
       _estado = EstadoTasa.listo;
-      await _calcularVariacion(generacion: generacion);
-      if (_cargaGeneracion != generacion) return;
-      if (_entrada.isNotEmpty && !_cargandoUsdt) convertir();
-    } catch (e) {
-      if (_cargaGeneracion != generacion) return;
-      _tasa = null;
-      _resultado = '';
-      _resultadoPreciso = '';
-      variacion = null;
-      _estado = EstadoTasa.error;
-      _error = e.toString();
-    }
+      _error = '';
+      if (fechaSolicitada == null) _publicarTasaActual();
+      if (fechaSolicitada == null) {
+        _cargarFechaSiguiente(generacion, monedaGeneracion);
+      }
+      FeriadosService.sincronizar();
+      if (_entrada.isNotEmpty) convertir(notificar: false);
+      _notificar();
 
-    notifyListeners();
+      // La tasa visible no espera a una operación secundaria de histórico.
+      await _calcularVariacion(generacion: generacion);
+    } catch (error) {
+      if (!_sigueVigente(
+        generacion: generacion,
+        monedaGeneracion: monedaGeneracion,
+      )) {
+        return;
+      }
+      _error = error.toString();
+      _estado = _tasa == null ? EstadoTasa.error : EstadoTasa.listo;
+      variacion = null;
+      _notificar();
+    }
+  }
+
+  Future<void> _cargarFechaSiguiente(
+    int generacion,
+    int monedaGeneracion,
+  ) async {
+    try {
+      final siguiente = await _repository.obtenerTasaSiguiente();
+      if (!_sigueVigente(
+        generacion: generacion,
+        monedaGeneracion: monedaGeneracion,
+      )) {
+        return;
+      }
+      _fechaTasaSiguiente = siguiente?.fechaEfectiva;
+      _tasaSiguienteDisponible = siguiente != null;
+      _notificar();
+    } catch (_) {
+      // La consulta opcional no debe esconder la tasa actual.
+    }
   }
 
   Future<void> _calcularVariacion({int? generacion}) async {
     final cargaGeneracion = generacion ?? _cargaGeneracion;
     final monedaGeneracion = _monedaGeneracion;
-    if (_cargaGeneracion != cargaGeneracion) return;
-
     final actual = _tasa;
     final moneda = _moneda;
-    if (actual == null || moneda == 'USDT') {
+    if (!_sigueVigente(
+          generacion: cargaGeneracion,
+          monedaGeneracion: monedaGeneracion,
+        ) ||
+        actual == null ||
+        moneda == 'USDT') {
       variacion = null;
       return;
     }
 
-    final tasaAnterior = await _repository.obtenerTasaAnterior(
-      actual.fechaEfectiva,
-    );
-    if (_cargaGeneracion != cargaGeneracion ||
-        _monedaGeneracion != monedaGeneracion ||
-        !identical(_tasa, actual) ||
-        _moneda != moneda) {
-      return;
+    try {
+      final tasaAnterior = await _repository.obtenerTasaAnterior(
+        actual.fechaEfectiva,
+      );
+      if (!_sigueVigente(
+            generacion: cargaGeneracion,
+            monedaGeneracion: monedaGeneracion,
+          ) ||
+          !identical(_tasa, actual) ||
+          _moneda != moneda) {
+        return;
+      }
+      if (tasaAnterior == null || !tasaAnterior.esValida) {
+        variacion = null;
+      } else {
+        final valorActual = actual.de(moneda);
+        final valorAnterior = tasaAnterior.de(moneda);
+        variacion =
+            valorActual.isFinite &&
+                valorAnterior.isFinite &&
+                valorActual > 0 &&
+                valorAnterior > 0
+            ? ((valorActual - valorAnterior) / valorAnterior) * 100
+            : null;
+      }
+      _notificar();
+    } catch (_) {
+      if (_sigueVigente(
+        generacion: cargaGeneracion,
+        monedaGeneracion: monedaGeneracion,
+      )) {
+        variacion = null;
+        _notificar();
+      }
     }
-    if (tasaAnterior == null) {
-      variacion = null;
-      return;
-    }
-    final valActual = actual.de(moneda);
-    final valAnterior = tasaAnterior.de(moneda);
-    if (valAnterior <= 0) {
-      variacion = null;
-      return;
-    }
-    variacion = ((valActual - valAnterior) / valAnterior) * 100;
   }
 
   Future<void> refrescarTasa() async {
@@ -178,110 +230,106 @@ class ConversorViewmodel extends ChangeNotifier {
     }
 
     final generacion = ++_cargaGeneracion;
-    _estado = EstadoTasa.cargando;
+    final monedaGeneracion = _monedaGeneracion;
+    if (_tasa == null) _estado = EstadoTasa.cargando;
     _error = '';
     _tasaSiguienteDisponible = false;
     _fechaTasaSiguiente = null;
     variacion = null;
-    notifyListeners();
+    _notificar();
 
     try {
-      final tasa = await _repository.refrescarTasa();
-      if (_cargaGeneracion != generacion) return;
+      final resultado = await _repository.refrescarTasaConEstado();
+      final tasa = resultado.tasa;
+      if (!_sigueVigente(
+        generacion: generacion,
+        monedaGeneracion: monedaGeneracion,
+      )) {
+        return;
+      }
+      if (!tasa.esValida) throw FormatException('Tasa BCV inválida');
 
-      final usdt = tasa.usdt > 0 ? tasa.usdt : (_tasa?.usdt ?? 0);
-      _tasa = usdt == tasa.usdt
-          ? tasa
-          : TasaBcv(
-              usd: tasa.usd,
-              eur: tasa.eur,
-              usdt: usdt,
-              fecha: tasa.fecha,
-              origen: tasa.origen,
-              fechaEfectiva: tasa.fechaEfectiva,
-            );
-      final siguiente = await _repository.obtenerTasaSiguiente();
-      if (_cargaGeneracion != generacion) return;
-      _fechaTasaSiguiente = siguiente?.fechaEfectiva;
-      _tasaSiguienteDisponible = siguiente != null;
-      FeriadosService.sincronizar(); // Sync en segundo plano
+      _tasa = tasa;
+      _resultadoTasa = resultado;
       _estado = EstadoTasa.listo;
+      _error = '';
+      _publicarTasaActual();
+      FeriadosService.sincronizar();
+      if (_entrada.isNotEmpty) convertir(notificar: false);
+      _notificar();
+      _cargarFechaSiguiente(generacion, monedaGeneracion);
       await _calcularVariacion(generacion: generacion);
-      if (_cargaGeneracion != generacion) return;
-      if (_entrada.isNotEmpty && !_cargandoUsdt) convertir();
-    } catch (e) {
-      if (_cargaGeneracion != generacion) return;
-      _tasa = null;
-      _resultado = '';
-      _resultadoPreciso = '';
-      variacion = null;
-      _estado = EstadoTasa.error;
-      _error = e.toString();
+    } catch (error) {
+      if (!_sigueVigente(
+        generacion: generacion,
+        monedaGeneracion: monedaGeneracion,
+      )) {
+        return;
+      }
+      _error = error.toString();
+      _estado = _tasa == null ? EstadoTasa.error : EstadoTasa.listo;
+      _notificar();
     }
-
-    notifyListeners();
   }
 
   Future<void> setMoneda(String moneda) async {
+    final normalizada = moneda.toUpperCase();
+    if (!const {'USD', 'EUR', 'USDT'}.contains(normalizada)) {
+      throw ArgumentError.value(moneda, 'moneda', 'Moneda no soportada');
+    }
+    if (_moneda == normalizada && normalizada != 'USDT') return;
+
     final generacion = ++_monedaGeneracion;
-    _moneda = moneda.toUpperCase();
-    _cargandoUsdt = false;
+    final necesitaTasaActual =
+        normalizada == 'USDT' && _fechaSeleccionada != null;
+    _moneda = normalizada;
+    if (necesitaTasaActual) _fechaSeleccionada = null;
+    _errorUsdt = '';
     variacion = null;
-    notifyListeners();
+    _limpiarResultado();
+    _notificar();
 
-    if (_necesitaUsdt) {
-      _cargandoUsdt = true;
-      _resultado = '';
-      _resultadoPreciso = '';
-      notifyListeners();
+    if (necesitaTasaActual) {
+      await cargarTasa();
+      if (!_sigueVigente(monedaGeneracion: generacion)) return;
+    } else {
+      await _calcularVariacion();
+      if (!_sigueVigente(monedaGeneracion: generacion)) return;
+    }
 
-      double? usdt;
-      try {
-        usdt = await _repository.obtenerUsdt();
-      } catch (_) {
-        usdt = null;
-      }
-      if (_monedaGeneracion != generacion) return;
-      if (_moneda != 'USDT') {
-        _cargandoUsdt = false;
-        notifyListeners();
-        return;
-      }
-      _cargandoUsdt = false;
+    if (normalizada == 'USDT') {
+      await _cargarUsdt(generacion);
+      return;
+    }
+    if (_tasa != null && _entrada.isNotEmpty) convertir(notificar: false);
+    _notificar();
+  }
 
-      if (usdt != null && usdt > 0) {
-        if (_tasa != null) {
-          _tasa = TasaBcv(
-            usd: _tasa!.usd,
-            eur: _tasa!.eur,
-            usdt: usdt,
-            fecha: _tasa!.fecha,
-            origen: _tasa!.origen,
-            fechaEfectiva: _tasa!.fechaEfectiva,
-          );
-        } else if (_fechaSeleccionada == null) {
-          _tasa = TasaBcv(
-            usd: 0,
-            eur: 0,
-            usdt: usdt,
-            fecha: DateTime.now(),
-            origen: 'api',
-            fechaEfectiva: fechaEfectivaActual(),
-          );
-          _estado = EstadoTasa.listo;
-        }
-        variacion = null;
-        if (_entrada.isNotEmpty) convertir();
-      }
-      notifyListeners();
+  Future<void> _cargarUsdt(int generacion, {bool forzar = false}) async {
+    _cargandoUsdt = true;
+    _errorUsdt = '';
+    _notificar();
+    CotizacionUsdt? cotizacion;
+    try {
+      cotizacion = await _repository.obtenerCotizacionUsdt(forzar: forzar);
+    } catch (_) {
+      cotizacion = null;
+    }
+    if (!_sigueVigente(monedaGeneracion: generacion) || _moneda != 'USDT') {
       return;
     }
 
+    _cotizacionUsdt = cotizacion;
     _cargandoUsdt = false;
-    await _calcularVariacion();
-    if (_monedaGeneracion != generacion) return;
-    if (_tasa != null && _entrada.isNotEmpty) convertir();
-    notifyListeners();
+    _errorUsdt = cotizacion == null ? 'No hay una tasa USDT disponible' : '';
+    if (_entrada.isNotEmpty) convertir(notificar: false);
+    _notificar();
+  }
+
+  Future<void> refrescarUsdt() async {
+    if (_moneda != 'USDT') return;
+    final generacion = ++_monedaGeneracion;
+    await _cargarUsdt(generacion, forzar: true);
   }
 
   Future<void> seleccionarFecha(DateTime fecha) async {
@@ -296,7 +344,9 @@ class ConversorViewmodel extends ChangeNotifier {
 
   void setEntrada(String valor) {
     _entrada = valor;
-    if (_tasa != null) convertir();
+    if (valor.isEmpty) _entradaInterpretada = false;
+    convertir(notificar: false);
+    _notificar();
   }
 
   void toggleDireccion() {
@@ -304,38 +354,123 @@ class ConversorViewmodel extends ChangeNotifier {
         ? ConversionDireccion.vesAMoneda
         : ConversionDireccion.monedaAVes;
 
-    if (_tasa != null && _resultado.isNotEmpty) {
+    if (_resultado.isNotEmpty) {
       _entrada = _resultado;
-      entradaController.text = _resultado;
-      convertir();
+      _entradaInterpretada = false;
+      entradaController.value = TextEditingValue(
+        text: _resultado,
+        selection: TextSelection.collapsed(offset: _resultado.length),
+      );
+      convertir(notificar: false);
     }
-    notifyListeners();
+    _notificar();
   }
 
-  void convertir() {
-    if (_tasa == null || _entrada.isEmpty) {
-      _resultado = '';
-      _resultadoPreciso = '';
-      notifyListeners();
+  void convertir({bool notificar = true}) {
+    final tasa = tasaActual;
+    final texto = _entrada.trim().replaceAll(',', '.');
+    if (texto.isEmpty ||
+        texto.endsWith('.') ||
+        !RegExp(r'^\d+(\.\d{1,4})?$').hasMatch(texto) ||
+        !tasa.isFinite ||
+        tasa <= 0) {
+      _limpiarResultado();
+      if (notificar) _notificar();
       return;
     }
 
-    var valor = _entrada.replaceAll(',', '.');
-    valor = valor.replaceAll(RegExp(r'[.]$'), '');
-
-    final monto = double.tryParse(valor);
-    if (monto == null) return;
-
-    double res;
-    if (_direccion == ConversionDireccion.monedaAVes) {
-      res = monto * tasaActual;
-    } else {
-      res = monto / tasaActual;
+    final monto = double.tryParse(texto);
+    if (monto == null || !monto.isFinite || monto < 0) {
+      _limpiarResultado();
+      if (notificar) _notificar();
+      return;
     }
 
-    _resultado = res.toStringAsFixed(2);
-    _resultadoPreciso = res.toStringAsFixed(4);
-    notifyListeners();
+    final resultado = _direccion == ConversionDireccion.monedaAVes
+        ? monto * tasa
+        : monto / tasa;
+    if (!resultado.isFinite) {
+      _limpiarResultado();
+    } else {
+      _resultado = resultado.toStringAsFixed(2);
+      _resultadoPreciso = resultado.toStringAsFixed(4);
+    }
+    if (notificar) _notificar();
+  }
+
+  /// Aplica de forma coordinada monto, divisa y dirección detectados por OCR.
+  Future<void> aplicarMontoEscaneado({
+    required String monto,
+    required String moneda,
+  }) async {
+    final divisa = moneda.toUpperCase().trim();
+    final esVes = const {'VES', 'BS', 'BS.'}.contains(divisa);
+    final esDivisaSoportada = const {
+      'USD',
+      r'US$',
+      'EUR',
+      '€',
+      'USDT',
+    }.contains(divisa);
+    final generacion = ++_monedaGeneracion;
+
+    if (esVes) {
+      _direccion = ConversionDireccion.vesAMoneda;
+    } else {
+      _direccion = ConversionDireccion.monedaAVes;
+      if (esDivisaSoportada) {
+        final monedaNormalizada = switch (divisa) {
+          r'US$' => 'USD',
+          '€' => 'EUR',
+          _ => divisa,
+        };
+        _moneda = monedaNormalizada;
+        if (monedaNormalizada == 'USDT') {
+          final requiereActual = _fechaSeleccionada != null;
+          _fechaSeleccionada = null;
+          if (requiereActual || _tasa == null) await cargarTasa();
+          if (!_sigueVigente(monedaGeneracion: generacion)) return;
+          await _cargarUsdt(generacion);
+          if (!_sigueVigente(monedaGeneracion: generacion)) return;
+        }
+      }
+    }
+
+    _entrada = monto;
+    _entradaInterpretada = true;
+    entradaController.value = TextEditingValue(
+      text: monto,
+      selection: TextSelection.collapsed(offset: monto.length),
+    );
+    convertir(notificar: false);
+    _notificar();
+  }
+
+  void _limpiarResultado() {
+    _resultado = '';
+    _resultadoPreciso = '';
+  }
+
+  bool _sigueVigente({int? generacion, int? monedaGeneracion}) =>
+      !_disposed &&
+      (generacion == null || _cargaGeneracion == generacion) &&
+      (monedaGeneracion == null || _monedaGeneracion == monedaGeneracion);
+
+  void _publicarTasaActual() {
+    final callback = onRateAvailable;
+    final resultado = _resultadoTasa;
+    if (callback == null || resultado == null) return;
+    unawaited(() async {
+      try {
+        await callback(resultado);
+      } catch (_) {
+        // An optional launcher widget must never block the currency converter.
+      }
+    }());
+  }
+
+  void _notificar() {
+    if (!_disposed) notifyListeners();
   }
 
   DateTime _fechaDia(DateTime fecha) =>
@@ -343,6 +478,9 @@ class ConversorViewmodel extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _cargaGeneracion++;
+    _monedaGeneracion++;
     entradaController.dispose();
     super.dispose();
   }

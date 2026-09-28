@@ -7,6 +7,7 @@ class TasaBcv {
   final DateTime fecha;
   final String origen;
   final DateTime fechaEfectiva;
+  final bool fechaEfectivaExplicita;
 
   const TasaBcv({
     required this.usd,
@@ -15,6 +16,7 @@ class TasaBcv {
     required this.fecha,
     required this.origen,
     required this.fechaEfectiva,
+    this.fechaEfectivaExplicita = false,
   });
 
   /// Crea una TasaBcv con fechaEfectiva calculada desde la hora actual
@@ -33,6 +35,7 @@ class TasaBcv {
       fecha: fecha,
       origen: origen,
       fechaEfectiva: fechaEfectivaActual(),
+      fechaEfectivaExplicita: false,
     );
   }
 
@@ -50,13 +53,14 @@ class TasaBcv {
   }
 
   Map<String, dynamic> toJson() => {
-        'usd': usd,
-        'eur': eur,
-        'usdt': usdt,
-        'fecha': fecha.toIso8601String(),
-        'origen': origen,
-        'fecha_efectiva': fechaEfectiva.toIso8601String(),
-      };
+    'usd': usd,
+    'eur': eur,
+    'usdt': usdt,
+    'fecha': fecha.toIso8601String(),
+    'origen': origen,
+    'fecha_efectiva': fechaEfectiva.toIso8601String(),
+    'fecha_efectiva_explicita': fechaEfectivaExplicita,
+  };
 
   factory TasaBcv.fromJson(Map<String, dynamic> json) {
     final fecha = DateTime.parse(json['fecha'] as String);
@@ -69,6 +73,17 @@ class TasaBcv {
       fechaEfectiva: json['fecha_efectiva'] != null
           ? DateTime.parse(json['fecha_efectiva'] as String)
           : calcularFechaEfectiva(fecha),
+      fechaEfectivaExplicita:
+          json['fecha_efectiva_explicita'] as bool? ??
+          json['fecha_efectiva'] != null,
     );
   }
+
+  bool get esValida =>
+      usd.isFinite &&
+      usd > 0 &&
+      eur.isFinite &&
+      eur > 0 &&
+      usdt.isFinite &&
+      usdt >= 0;
 }

@@ -1,4 +1,4 @@
-.PHONY: analyze test build-apk build-apk-debug run pub-get clean
+.PHONY: analyze test build-apk build-apk-arm64 build-apk-debug run pub-get clean
 
 analyze:
 	flutter analyze
@@ -6,8 +6,10 @@ analyze:
 test:
 	flutter test
 
-build-apk:
-	flutter build apk
+build-apk: build-apk-arm64
+
+build-apk-arm64:
+	flutter build apk --release --target-platform android-arm64
 
 build-apk-debug:
 	flutter build apk --debug

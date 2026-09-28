@@ -18,6 +18,7 @@
 | Formato | intl |
 | Localización | flutter_localizations (es) |
 | OCR | google_mlkit_text_recognition (on-device, offline) + image_picker |
+| Widgets Android | home_widget (puente de datos) + Workmanager; UI nativa con RemoteViews |
 
 ## Arquitectura
 
@@ -25,7 +26,11 @@
 lib/
 ├── main.dart                        # CuantoesApp, MaterialApp, locale es
 ├── models/
-│   └── tasa_bcv.dart                # TasaBcv (USD, EUR, USDT, fecha, origen, fechaEfectiva)
+│   ├── tasa_bcv.dart                # Tasa oficial USD/EUR
+│   ├── cotizacion_usdt.dart         # Referencia P2P, independiente del BCV
+│   ├── resultado_tasa.dart          # Modo de obtención y frescura
+│   ├── documento_ocr.dart           # Texto y regiones con geometría
+│   └── widget_snapshot.dart         # Contrato versionado con RemoteViews
 ├── utils/
 │   ├── feriados_ve.dart             # Feriados bancarios VE (fijos + Pascua)
 │   └── numeros_ocr.dart             # Extracción y parseo de números desde OCR
@@ -35,25 +40,33 @@ lib/
 │   ├── bcv_today_service.dart       # BCV Today (fallback 1)
 │   ├── chitty_bcv_service.dart      # Chitty BCV (fallback 2 + USDT)
 │   ├── bcv_cache_service.dart       # SharedPreferences
-│   ├── ocr_service.dart              # Texto desde imagen (ML Kit)
-│   └── tasa_repository.dart          # proveedores en cascada → cache
+│   ├── ocr_service.dart              # Texto y geometría desde ML Kit
+│   ├── tasa_repository.dart          # proveedores en cascada → cache
+│   ├── home_widget_service.dart      # Snapshot y actualización de widgets
+│   └── widget_background_refresh.dart # Tarea periódica WorkManager
 ├── viewmodels/
 │   └── conversor_viewmodel.dart     # ChangeNotifier, moneda, fechas, conversión, variación
 └── screens/
-    └── conversor_screen.dart        # UI: tabs USD/EUR/USDT, calendario, conversor
+    ├── conversor_screen.dart        # UI adaptable, tasas, calendario y conversor
+    ├── camera_capture_screen.dart   # Captura con lifecycle
+    └── ocr_selection_screen.dart   # Foto, overlay, selección y transferencia
+
+android/app/src/main/
+├── kotlin/.../BcvWidgetProvider.kt # AppWidgetProvider nativo grande/compacto
+└── res/layout + res/xml            # RemoteViews y configuración Android
 ```
 
 ## Flujo de datos
 
 ### Tasa actual
 ```
-Usuario → ConversorViewmodel.cargarTasa() → TasaRepository.obtenerTasa()
-                                                 ├── cache con fechaEfectiva ≤ hoy VE y vigente? → retorna
-                                                 └── refrescarTasa()
-                                                      ├── DolarAPI → guarda cache
-                                                      ├── BCV Today → guarda cache
-                                                      ├── Chitty BCV → guarda cache
-                                                      └── última cache válida → retorna
+Usuario → ConversorViewmodel.cargarTasa() → TasaRepository.obtenerTasaConEstado()
+                                                 ├── caché válida para el día efectivo → retorna con metadatos
+                                                 └── refrescarTasaConEstado()
+                                                      ├── DolarAPI → BCV Today → Chitty BCV
+                                                      └── última tasa aplicable en caché
+
+Tasa actual → HomeWidgetService → snapshot versionado → AppWidgetProvider nativo
 ```
 
 La cache consultada como tasa actual nunca devuelve una entrada con
@@ -89,10 +102,18 @@ antes de que aparezca su tasa.
 - Se muestra en la UI como "▲ +0.61%" / "▼ -0.20%" junto a la tasa correspondiente
 
 ### Escaneo de precios (OCR)
-- `OcrService.reconocerTexto(ruta)` procesa la imagen con ML Kit (script Latin, on-device, sin conexión).
-- `extraerNumeros(texto)` devuelve los tokens numéricos parseados, sin repetidos y en orden de aparición.
-- `parsearNumero(token)` soporta `1.234,56`, `848,5458` y `10.50`; un separador único con 3 dígitos se interpreta como miles.
-- La UI ofrece cámara o galería y un diálogo con los números detectados; el elegido llena la entrada del conversor.
+- `OcrService.reconocerDocumento(ruta)` procesa la foto con ML Kit Latin on-device y conserva bloques, líneas, polígonos y dimensiones.
+- `OcrSelectionScreen` dibuja las regiones sobre la foto, permite selección por toque/arrastre, selección accesible y copia.
+- `extraerNumeros(texto)` conserva apariciones repetidas y posiciones; `parsearNumero(token)` no fusiona números separados por espacios y señala separadores ambiguos.
+- Antes de transferir, se revisan el monto, la interpretación de miles/decimales y la moneda VES/USD/EUR/USDT. El sentido de conversión se ajusta con el monto.
+- `ImagePicker.retrieveLostData()` recupera una imagen si Android destruye la Activity durante la selección.
+
+### Widgets Android
+- `BcvWidgetProvider` y `BcvCompactWidgetProvider` son widgets nativos `AppWidgetProvider` con layouts XML `RemoteViews`; no usan Flutter en el launcher.
+- `HomeWidgetService` comparte USD/EUR, fecha efectiva, fuente y estado de validación en un snapshot versionado.
+- El widget principal es 4×2. El compacto 2×2 muestra USD o EUR, configurable globalmente desde el Drawer.
+- WorkManager intenta refrescar cada 60 minutos cuando detecta una instancia instalada y hay red; Android puede aplazarlo por Doze o ahorro de batería.
+- Pruebas en launcher real, reinicio/Doze, cámara física y flujo OCR de extremo a extremo siguen pendientes.
 
 ### Fechas y fuentes
 - DolarAPI y los históricos de los proveedores solo combinan USD y EUR de una misma `fechaEfectiva` común.
@@ -111,7 +132,7 @@ antes de que aparezca su tasa.
 
 ```bash
 flutter analyze          # análisis estático
-flutter build apk        # build release Android
+  flutter build apk --release --target-platform android-arm64 # entrega ARM64
 flutter build apk --debug # build debug
 flutter test             # pruebas
 ```

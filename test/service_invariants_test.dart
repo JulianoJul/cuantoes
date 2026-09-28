@@ -6,6 +6,7 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:cuantoes/models/tasa_bcv.dart';
+import 'package:cuantoes/models/cotizacion_usdt.dart';
 import 'package:cuantoes/services/bcv_api_service.dart';
 import 'package:cuantoes/services/bcv_cache_service.dart';
 import 'package:cuantoes/services/bcv_provider.dart';
@@ -30,10 +31,7 @@ void main() {
     expect(cachedCurrent?.usd, actual.usd);
 
     final api = _FakeApi()..realtime = futura;
-    final repository = TasaRepository(
-      api: api,
-      cache: cache,
-    );
+    final repository = TasaRepository(api: api, cache: cache);
 
     final result = await repository.obtenerTasa();
 
@@ -48,15 +46,16 @@ void main() {
       final cache = BcvCacheService();
       final hoy = _hoyVenezuela();
       final actual = _tasa(_diaHabilAnterior(hoy), 100, 110);
-      final futura = _tasa(proximoDiaHabil(hoy.add(const Duration(days: 1))), 200, 220);
+      final futura = _tasa(
+        proximoDiaHabil(hoy.add(const Duration(days: 1))),
+        200,
+        220,
+      );
       await cache.guardarTasa(actual);
       await cache.guardarTasa(futura);
 
       final api = _FakeApi()..realtimeError = Exception('offline');
-      final repository = TasaRepository(
-        api: api,
-        cache: cache,
-      );
+      final repository = TasaRepository(api: api, cache: cache);
 
       final result = await repository.refrescarTasa();
 
@@ -71,14 +70,15 @@ void main() {
       final cache = BcvCacheService();
       final hoy = _hoyVenezuela();
       final actual = _tasa(_diaHabilAnterior(hoy), 100, 110);
-      final futura = _tasa(proximoDiaHabil(hoy.add(const Duration(days: 1))), 200, 220);
+      final futura = _tasa(
+        proximoDiaHabil(hoy.add(const Duration(days: 1))),
+        200,
+        220,
+      );
       await cache.guardarTasa(actual);
 
       final api = _FakeApi()..realtime = futura;
-      final repository = TasaRepository(
-        api: api,
-        cache: cache,
-      );
+      final repository = TasaRepository(api: api, cache: cache);
 
       await repository.refrescarTasa();
       await repository.refrescarTasa();
@@ -98,20 +98,21 @@ void main() {
       final cache = BcvCacheService();
       final hoy = _hoyVenezuela();
       final actual = _tasa(_diaHabilAnterior(hoy), 100, 110);
-      final futura = _tasa(proximoDiaHabil(hoy.add(const Duration(days: 1))), 200, 220);
+      final futura = _tasa(
+        proximoDiaHabil(hoy.add(const Duration(days: 1))),
+        200,
+        220,
+      );
 
       final api = _FakeApi()
         ..realtime = futura
         ..historical = actual;
-      final repository = TasaRepository(
-        api: api,
-        cache: cache,
-      );
+      final repository = TasaRepository(api: api, cache: cache);
 
       final result = await repository.refrescarTasa();
 
       expect(result.usd, actual.usd);
-    expect(_dia(result.fechaEfectiva), _dia(actual.fechaEfectiva));
+      expect(_dia(result.fechaEfectiva), _dia(actual.fechaEfectiva));
     },
   );
 
@@ -125,10 +126,7 @@ void main() {
       await cache.guardarTasa(_tasa(viernes, 100, 110));
       await cache.guardarTasa(_tasa(DateTime(2026, 9, 7), 200, 220));
 
-      final repository = TasaRepository(
-        api: _FakeApi(),
-        cache: cache,
-      );
+      final repository = TasaRepository(api: _FakeApi(), cache: cache);
       final result = await repository.obtenerTasaHistorica(
         DateTime(2026, 9, 6),
       );
@@ -141,10 +139,7 @@ void main() {
   test('historical lookup rejects a future API result', () async {
     final requested = DateTime(2026, 9, 6);
     final api = _FakeApi()..historical = _tasa(DateTime(2026, 9, 7), 200, 220);
-    final repository = TasaRepository(
-      api: api,
-      cache: BcvCacheService(),
-    );
+    final repository = TasaRepository(api: api, cache: BcvCacheService());
 
     final result = await repository.obtenerTasaHistorica(requested);
 
@@ -160,10 +155,7 @@ void main() {
       await cache.guardarTasa(cacheada);
 
       final api = _FakeApi()..historical = _tasa(DateTime(2026, 9, 9), 90, 99);
-      final repository = TasaRepository(
-        api: api,
-        cache: cache,
-      );
+      final repository = TasaRepository(api: api, cache: cache);
 
       final result = await repository.obtenerTasaHistorica(
         DateTime(2026, 9, 11),
@@ -183,10 +175,7 @@ void main() {
       await cache.guardarTasa(cacheada);
 
       final api = _FakeApi()..previous = _tasa(DateTime(2026, 9, 9), 90, 99);
-      final repository = TasaRepository(
-        api: api,
-        cache: cache,
-      );
+      final repository = TasaRepository(api: api, cache: cache);
 
       final result = await repository.obtenerTasaAnterior(
         DateTime(2026, 9, 15),
@@ -201,10 +190,7 @@ void main() {
     final limite = DateTime(2026, 9, 8);
     final previous = _tasa(DateTime(2026, 9, 4), 100, 110);
     final api = _FakeApi()..previous = previous;
-    final repository = TasaRepository(
-      api: api,
-      cache: BcvCacheService(),
-    );
+    final repository = TasaRepository(api: api, cache: BcvCacheService());
 
     final result = await repository.obtenerTasaAnterior(limite);
 
@@ -229,35 +215,38 @@ void main() {
     expect(fallback.realtimeCalls, 1);
   });
 
-  test('DolarAPI history chooses USD and EUR from one effective date', () async {
-    final client = MockClient((request) async {
-      final isUsd = request.url.path.contains('/dolares/');
-      final rates = isUsd
-          ? [
-              {'promedio': 108, 'fecha': '2026-09-08'},
-              {'promedio': 107, 'fecha': '2026-09-07'},
-              {'promedio': 105, 'fecha': '2026-09-05'},
-            ]
-          : [
-              {'promedio': 208, 'fecha': '2026-09-08'},
-              {'promedio': 207, 'fecha': '2026-09-07'},
-              {'promedio': 205, 'fecha': '2026-09-05'},
-            ];
-      return http.Response(jsonEncode(rates), 200);
-    });
-    final api = BcvApiService(client: client);
+  test(
+    'DolarAPI history chooses USD and EUR from one effective date',
+    () async {
+      final client = MockClient((request) async {
+        final isUsd = request.url.path.contains('/dolares/');
+        final rates = isUsd
+            ? [
+                {'promedio': 108, 'fecha': '2026-09-08'},
+                {'promedio': 107, 'fecha': '2026-09-07'},
+                {'promedio': 105, 'fecha': '2026-09-05'},
+              ]
+            : [
+                {'promedio': 208, 'fecha': '2026-09-08'},
+                {'promedio': 207, 'fecha': '2026-09-07'},
+                {'promedio': 205, 'fecha': '2026-09-05'},
+              ];
+        return http.Response(jsonEncode(rates), 200);
+      });
+      final api = BcvApiService(client: client);
 
-    final result = await api.obtenerTasaHistorica(DateTime(2026, 9, 8));
+      final result = await api.obtenerTasaHistorica(DateTime(2026, 9, 8));
 
-    expect(result?.usd, 108);
-    expect(result?.eur, 208);
-    expect(_dia(result!.fechaEfectiva), DateTime(2026, 9, 8));
+      expect(result?.usd, 108);
+      expect(result?.eur, 208);
+      expect(_dia(result!.fechaEfectiva), DateTime(2026, 9, 8));
 
-    final previous = await api.obtenerTasaAnterior(DateTime(2026, 9, 8));
-    expect(previous?.usd, 107);
-    expect(previous?.eur, 207);
-    expect(_dia(previous!.fechaEfectiva), DateTime(2026, 9, 7));
-  });
+      final previous = await api.obtenerTasaAnterior(DateTime(2026, 9, 8));
+      expect(previous?.usd, 107);
+      expect(previous?.eur, 207);
+      expect(_dia(previous!.fechaEfectiva), DateTime(2026, 9, 7));
+    },
+  );
 }
 
 DateTime _hoyVenezuela() {
@@ -309,6 +298,9 @@ class _FakeApi extends BcvApiService {
     previousCalls++;
     return previous;
   }
+
+  @override
+  Future<TasaBcv?> obtenerTasaSiguiente() async => null;
 }
 
 class _FakeProvider implements BcvProvider {
@@ -333,5 +325,11 @@ class _FakeProvider implements BcvProvider {
   Future<TasaBcv?> obtenerTasaAnterior(DateTime fechaLimite) async => null;
 
   @override
+  Future<TasaBcv?> obtenerTasaSiguiente() async => null;
+
+  @override
   Future<double?> obtenerUsdt() async => null;
+
+  @override
+  Future<CotizacionUsdt?> obtenerCotizacionUsdt() async => null;
 }

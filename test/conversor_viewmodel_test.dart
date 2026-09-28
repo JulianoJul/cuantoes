@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:cuantoes/models/cotizacion_usdt.dart';
 import 'package:cuantoes/models/tasa_bcv.dart';
 import 'package:cuantoes/services/tasa_repository.dart';
 import 'package:cuantoes/utils/feriados_ve.dart';
@@ -11,6 +12,9 @@ class _FakeTasaRepository extends TasaRepository {
   TasaBcv? anterior;
   TasaBcv? actual;
   TasaBcv? siguiente;
+  CotizacionUsdt? usdt;
+  int obtenerCotizacionUsdtCalls = 0;
+  bool refrescoUsdtForzado = false;
   int obtenerTasaCalls = 0;
   int refrescarTasaCalls = 0;
   int obtenerTasaHistoricaCalls = 0;
@@ -42,6 +46,13 @@ class _FakeTasaRepository extends TasaRepository {
 
   @override
   Future<TasaBcv?> obtenerTasaSiguiente() async => siguiente;
+
+  @override
+  Future<CotizacionUsdt?> obtenerCotizacionUsdt({bool forzar = false}) async {
+    obtenerCotizacionUsdtCalls++;
+    refrescoUsdtForzado = forzar;
+    return usdt;
+  }
 }
 
 TasaBcv _tasa({
@@ -166,5 +177,77 @@ void main() {
     expect(vm.fechaTasaSiguiente, manana);
     expect(vm.tasaSiguienteDisponible, isTrue);
     expect(vm.fechaMaximaSeleccionable, manana);
+  });
+
+  test(
+    'USDT no contamina tasas BCV y calcula con cotización separada',
+    () async {
+      final repository = _FakeTasaRepository()
+        ..actual = _tasa(usd: 100, eur: 110, efectiva: _hoyVenezuela())
+        ..usdt = CotizacionUsdt(
+          valor: 120,
+          fechaEfectiva: _hoyVenezuela(),
+          obtenidaEnUtc: DateTime.now().toUtc(),
+          origen: 'p2p-test',
+        );
+      final vm = ConversorViewmodel(repository: repository);
+      addTearDown(vm.dispose);
+
+      await vm.cargarTasa();
+      await vm.setMoneda('USDT');
+      vm.setEntrada('2');
+
+      expect(vm.tasa?.usdt, 0);
+      expect(vm.cotizacionUsdt?.origen, 'p2p-test');
+      expect(vm.tasaActual, 120);
+      expect(vm.resultado, '240.00');
+      expect(repository.obtenerCotizacionUsdtCalls, 1);
+    },
+  );
+
+  test(
+    'una tasa USDT ausente no genera Infinity y limpia el resultado',
+    () async {
+      final repository = _FakeTasaRepository()
+        ..actual = _tasa(usd: 100, eur: 110, efectiva: _hoyVenezuela());
+      final vm = ConversorViewmodel(repository: repository);
+      addTearDown(vm.dispose);
+
+      await vm.cargarTasa();
+      await vm.setMoneda('USDT');
+      vm.setEntrada('2');
+
+      expect(vm.errorUsdt, isNotEmpty);
+      expect(vm.resultado, isEmpty);
+      expect(vm.resultadoPreciso, isEmpty);
+    },
+  );
+
+  test('entrada numérica incompleta limpia el resultado previo', () async {
+    final repository = _FakeTasaRepository()
+      ..actual = _tasa(usd: 100, eur: 110, efectiva: _hoyVenezuela());
+    final vm = ConversorViewmodel(repository: repository);
+    addTearDown(vm.dispose);
+
+    await vm.cargarTasa();
+    vm.setEntrada('10');
+    expect(vm.resultado, '1000.00');
+    vm.setEntrada('10,');
+    expect(vm.resultado, isEmpty);
+  });
+
+  test('monto OCR en VES establece la dirección inversa', () async {
+    final repository = _FakeTasaRepository()
+      ..actual = _tasa(usd: 100, eur: 110, efectiva: _hoyVenezuela());
+    final vm = ConversorViewmodel(repository: repository);
+    addTearDown(vm.dispose);
+
+    await vm.cargarTasa();
+    await vm.aplicarMontoEscaneado(monto: '20,00', moneda: 'VES');
+
+    expect(vm.esMonedaAVes, isFalse);
+    expect(vm.moneda, 'USD');
+    expect(vm.entrada, '20,00');
+    expect(vm.resultado, '0.20');
   });
 }

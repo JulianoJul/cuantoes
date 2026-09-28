@@ -22,10 +22,7 @@ void main() {
     final cache = BcvCacheService();
     await cache.guardarTasa(actual);
     final api = _FakeApi();
-    final repository = TasaRepository(
-      api: api,
-      cache: cache,
-    );
+    final repository = TasaRepository(api: api, cache: cache);
 
     final result = await repository.obtenerTasa();
 
@@ -58,10 +55,7 @@ void main() {
       final cache = BcvCacheService();
       await cache.guardarTasa(cached);
       final api = _FakeApi()..historical = apiRate;
-      final repository = TasaRepository(
-        api: api,
-        cache: cache,
-      );
+      final repository = TasaRepository(api: api, cache: cache);
 
       final result = await repository.obtenerTasaHistorica(requested);
 
@@ -76,10 +70,7 @@ void main() {
     final cache = BcvCacheService();
     await cache.guardarTasa(cached);
     final api = _FakeApi()..historical = _tasa(requested, 101, 111);
-    final repository = TasaRepository(
-      api: api,
-      cache: cache,
-    );
+    final repository = TasaRepository(api: api, cache: cache);
 
     final result = await repository.obtenerTasaHistorica(requested);
 
@@ -96,10 +87,7 @@ void main() {
       final cache = BcvCacheService();
       await cache.guardarTasa(stale);
       final api = _FakeApi()..previous = apiRate;
-      final repository = TasaRepository(
-        api: api,
-        cache: cache,
-      );
+      final repository = TasaRepository(api: api, cache: cache);
 
       final result = await repository.obtenerTasaAnterior(limite);
 
@@ -114,10 +102,7 @@ void main() {
     final cache = BcvCacheService();
     await cache.guardarTasa(previous);
     final api = _FakeApi()..previous = _tasa(DateTime(2026, 9, 3), 90, 99);
-    final repository = TasaRepository(
-      api: api,
-      cache: cache,
-    );
+    final repository = TasaRepository(api: api, cache: cache);
 
     final result = await repository.obtenerTasaAnterior(limite);
 

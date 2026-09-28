@@ -19,6 +19,8 @@ dependencies:
   google_mlkit_text_recognition: ^0.17.1
   image_picker: ^1.2.3
   camera: ^0.12.1
+  home_widget: ^0.10.0
+  workmanager: ^0.10.10
 
 dev_dependencies:
   flutter_test:

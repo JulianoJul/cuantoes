@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_compact_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bcv_background"
+    android:gravity="center_vertical"
+    android:orientation="vertical"
+    android:paddingHorizontal="12dp"
+    android:paddingVertical="8dp">
+    <TextView
+        android:id="@+id/widget_compact_currency"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="USD · BCV"
+        android:textColor="#FFB4C5FF"
+        android:textSize="10sp"
+        android:textStyle="bold" />
+    <TextView
+        android:id="@+id/widget_compact_rate"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:singleLine="true"
+        android:text="Sin dato · abre Cuantoes"
+        android:textColor="#FFDAE2FD"
+        android:textSize="17sp"
+        android:textStyle="bold" />
+    <TextView
+        android:id="@+id/widget_compact_footer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:singleLine="true"
+        android:text="BCV"
+        android:textColor="#FFC3C6D7"
+        android:textSize="9sp" />
+</LinearLayout>

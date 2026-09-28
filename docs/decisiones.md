@@ -178,6 +178,8 @@
 
 ## DEC-014: Escaneo de precios por OCR
 
+> **Estado:** supersedido por DEC-017. Este registro describe el flujo de texto plano anterior.
+
 - **Origen:** `[Solicitud del usuario]`
 - **Contexto y Causa:** Se quería poder tomar una foto o captura de un precio y usarlo en el conversor sin escribirlo a mano.
 - **Decisión:**
@@ -205,3 +207,31 @@
 - **Impacto:** La UI sigue consumiendo `TasaBcv` sin conocer el proveedor;
   `origen` identifica la fuente que respondió y los fallbacks se pueden probar
   con implementaciones inyectadas de `BcvProvider`.
+
+---
+
+## DEC-016: Metadatos de frescura y cotización USDT independiente
+
+- **Estado:** implementado.
+- **Decisión:** mantener la cascada DolarAPI → BCV Today → Chitty BCV → caché. USD/EUR usan `TasaBcv` y el estado de consulta usa `ResultadoTasa`; USDT se almacena como `CotizacionUsdt`, con fecha, fuente, instante de consulta, persistencia y TTL propios.
+- **Presentación:** distinguir fecha efectiva de última validación y marcar la tasa de caché cuando falla la actualización. Una tasa oficial no hereda el valor ni la procedencia P2P de USDT.
+- **Impacto:** widgets y pantalla principal comparten las mismas etiquetas de caché/frescura. El modo offline no debe afirmar que el valor acaba de actualizarse.
+
+---
+
+## DEC-017: OCR con geometría y confirmación monetaria
+
+- **Estado:** implementado; pendiente validación física de cámara/EXIF/zoom.
+- **Decisión:** adaptar el resultado de ML Kit a `DocumentoOcr` y `RegionOcr`, dibujar las regiones sobre la foto y mantener identidad aunque dos importes sean iguales. Selección accesible, copia y transferencia pasan por confirmación editable de monto y moneda.
+- **Interpretación:** no unir números separados por espacios. Para un único separador con tres cifras, pedir elección explícita entre miles y decimales. Transferir VES cambia la dirección a VES→USD/EUR/USDT.
+- **Impacto:** la acción OCR no depende de un diálogo que solo contiene texto plano; las geometrías se mapean con `OcrCoordinateMapper`.
+
+---
+
+## DEC-018: Widgets nativos Android y actualización de mejor esfuerzo
+
+- **Estado:** implementado; falta verificación en launcher/dispositivo real.
+- **Decisión:** usar `home_widget` únicamente como puente de preferencias/actualización y escribir el launcher UI con `AppWidgetProvider` + `RemoteViews` Kotlin/XML. El widget grande es 4×2 USD/EUR; el compacto es 2×2 y su divisa se configura globalmente desde la app.
+- **Snapshot:** versionado, separado del histórico, con valores BCV, fecha efectiva, fuente y estado de validación/offline. El clic abre Cuantoes.
+- **Fondo:** WorkManager solicita una actualización horaria solo cuando la app detecta un widget instalado. Android/Doze puede diferirla; no mostrarla como horario garantizado. Sin widgets instalados, se cancela el trabajo detectado al iniciar/reanudar la app.
+- **Pendiente:** pruebas en launcher real para alta/baja, reinicio, proceso eliminado, Doze, offline y dimensiones/resizing. La moneda compacta no se configura por instancia.
