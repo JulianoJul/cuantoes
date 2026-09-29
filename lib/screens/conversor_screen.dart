@@ -12,11 +12,15 @@ import '../services/settings_provider.dart';
 import '../services/tasa_repository.dart';
 import '../services/widget_background_refresh.dart';
 import '../utils/automatic_comma_formatter.dart';
+import '../utils/currency_labels.dart';
 import '../viewmodels/conversor_viewmodel.dart';
 import 'camera_capture_screen.dart';
 import 'ocr_selection_screen.dart';
+import 'rate_date_picker.dart';
 import 'rates_sheet.dart';
 import 'settings_screen.dart';
+
+const _widgetActionChannel = MethodChannel('ve.cuantoes/widget_action');
 
 class ConversorScreen extends StatelessWidget {
   final TasaRepository? repository;
@@ -52,6 +56,33 @@ class _ConversorBodyState extends State<_ConversorBody>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _widgetActionChannel.setMethodCallHandler(_handleWidgetAction);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _consumeWidgetAction());
+  }
+
+  Future<dynamic> _handleWidgetAction(MethodCall call) async {
+    if (call.method == 'focusAmount') _focusAmount();
+  }
+
+  Future<void> _consumeWidgetAction() async {
+    try {
+      final shouldFocus =
+          await _widgetActionChannel.invokeMethod<bool>('consumeFocusAmount') ??
+          false;
+      if (shouldFocus) _focusAmount();
+    } on MissingPluginException {
+      // Los tests y plataformas no Android no registran este canal.
+    } on PlatformException {
+      // Abrir desde el widget es una mejora; no debe bloquear el conversor.
+    }
+  }
+
+  void _focusAmount() {
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _montoFocusNode.requestFocus();
+    });
   }
 
   @override
@@ -68,6 +99,7 @@ class _ConversorBodyState extends State<_ConversorBody>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _widgetActionChannel.setMethodCallHandler(null);
     _montoFocusNode.dispose();
     super.dispose();
   }
@@ -77,7 +109,9 @@ class _ConversorBodyState extends State<_ConversorBody>
     super.didChangeDependencies();
     if (_lostDataCheckScheduled) return;
     _lostDataCheckScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _recuperarImagenPerdida());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _recuperarImagenPerdida(),
+    );
   }
 
   Future<void> _recuperarImagenPerdida() async {
@@ -107,57 +141,53 @@ class _ConversorBodyState extends State<_ConversorBody>
   Widget build(BuildContext context) {
     final vm = context.watch<ConversorViewmodel>();
     final settings = context.watch<SettingsProvider>();
-    final tecladoVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Cuantoes'),
-        actions: [
-          IconButton(
-            tooltip: 'Escanear texto',
-            onPressed: _escanearPrecio,
-            icon: const Icon(Icons.document_scanner_outlined),
-          ),
-          IconButton(
-            tooltip: 'Ajustes',
-            onPressed: () => _abrirAjustes(settings),
-            icon: const Icon(Icons.settings_outlined),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        top: false,
-        child: LayoutBuilder(
-          builder: (context, constraints) => SingleChildScrollView(
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
-            padding: EdgeInsets.fromLTRB(
-              16,
-              tecladoVisible ? 4 : 12,
-              16,
-              tecladoVisible ? 8 : 20,
-            ),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 560),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildConversionPanel(
-                      context,
-                      vm,
-                      settings,
-                      compact: tecladoVisible || constraints.maxHeight < 420,
+      resizeToAvoidBottomInset: false,
+      body: GestureDetector(
+        key: const Key('dismiss-keyboard-area'),
+        behavior: HitTestBehavior.translucent,
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              const verticalPadding = 32.0;
+              final minContentHeight = constraints.maxHeight > verticalPadding
+                  ? constraints.maxHeight - verticalPadding
+                  : 0.0;
+              return SingleChildScrollView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: minContentHeight),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 560),
+                      child: Column(
+                        key: const Key('home-content'),
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildConversionPanel(
+                            context,
+                            vm,
+                            settings,
+                            compact: constraints.maxHeight < 520,
+                          ),
+                          const SizedBox(height: 12),
+                          _buildSecondaryActions(vm, settings),
+                          const SizedBox(height: 12),
+                          _buildScanButton(),
+                          const SizedBox(height: 12),
+                          _buildRateSummary(context, vm),
+                        ],
+                      ),
                     ),
-                    if (!tecladoVisible) ...[
-                      const SizedBox(height: 12),
-                      _buildScanButton(),
-                    ],
-                    const SizedBox(height: 12),
-                    _buildRateSummary(context, vm),
-                  ],
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ),
       ),
@@ -171,27 +201,33 @@ class _ConversorBodyState extends State<_ConversorBody>
     required bool compact,
   }) {
     final tema = Theme.of(context);
-    final formatoTasa = NumberFormat('#,##0.####', 'es_VE');
+    final formatoMonto = NumberFormat('#,##0.00', 'es_VE');
     final padding = compact ? 14.0 : 20.0;
 
     return Card(
+      key: const Key('conversion-panel'),
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(22),
         side: BorderSide(color: tema.colorScheme.outlineVariant),
       ),
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: padding, vertical: compact ? 8 : 14),
+        padding: EdgeInsets.symmetric(
+          horizontal: padding,
+          vertical: compact ? 8 : 14,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _buildPairSelector(context, vm),
-            const SizedBox(height: 4),
+            const SizedBox(height: 16),
             TextField(
               focusNode: _montoFocusNode,
               controller: vm.entradaController,
               onChanged: vm.setEntrada,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               textInputAction: TextInputAction.done,
               inputFormatters: [
                 if (settings.isAutomaticComma && !vm.entradaInterpretada)
@@ -199,20 +235,22 @@ class _ConversorBodyState extends State<_ConversorBody>
                 else
                   TextInputFormatter.withFunction((oldValue, newValue) {
                     final text = newValue.text;
-                    if (text.isEmpty || RegExp(r'^\d*([,.]\d{0,4})?$').hasMatch(text)) {
+                    if (text.isEmpty ||
+                        RegExp(r'^\d*([,.]\d{0,2})?$').hasMatch(text)) {
                       return newValue;
                     }
                     return oldValue;
                   }),
               ],
               style: TextStyle(
-                fontSize: compact ? 34 : 40,
+                fontSize: compact ? 32 : 36,
                 fontWeight: FontWeight.w600,
                 height: 1.15,
               ),
               decoration: InputDecoration(
-                labelText: 'Monto',
-                hintText: 'Escribe un monto',
+                labelText: 'Monto en ${vm.labelOrigen}',
+                hintText: '0,00',
+                floatingLabelBehavior: FloatingLabelBehavior.always,
                 border: InputBorder.none,
                 contentPadding: EdgeInsets.zero,
                 isDense: compact,
@@ -237,9 +275,12 @@ class _ConversorBodyState extends State<_ConversorBody>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('Resultado', style: tema.textTheme.labelMedium),
+                      Text(
+                        'Resultado en ${vm.labelDestino}',
+                        style: tema.textTheme.labelMedium,
+                      ),
                       const SizedBox(height: 2),
-                      _buildResultadoValor(context, vm, formatoTasa, compact),
+                      _buildResultadoValor(context, vm, formatoMonto, compact),
                     ],
                   ),
                 ),
@@ -247,7 +288,7 @@ class _ConversorBodyState extends State<_ConversorBody>
                   tooltip: 'Copiar resultado',
                   onPressed: vm.resultado.isEmpty
                       ? null
-                      : () => _copiarResultado(context, vm, formatoTasa),
+                      : () => _copiarResultado(context, vm, formatoMonto),
                   icon: const Icon(Icons.copy_all_outlined),
                 ),
               ],
@@ -261,42 +302,69 @@ class _ConversorBodyState extends State<_ConversorBody>
   Widget _buildPairSelector(BuildContext context, ConversorViewmodel vm) {
     final selector = Expanded(
       child: DropdownButtonHideUnderline(
+        key: const Key('currency-pair-selector'),
         child: DropdownButton<String>(
           value: vm.moneda,
           isExpanded: true,
           borderRadius: BorderRadius.circular(14),
-          items: const [
-            DropdownMenuItem(value: 'USD', child: Text('USD · BCV')),
-            DropdownMenuItem(value: 'EUR', child: Text('EUR · BCV')),
-            DropdownMenuItem(value: 'USDT', child: Text('USDT · P2P')),
-          ],
+          items: monedasConversor
+              .map(
+                (moneda) => DropdownMenuItem(
+                  value: moneda,
+                  child: Text(etiquetaSelectorMoneda(moneda)),
+                ),
+              )
+              .toList(),
           onChanged: (value) {
             if (value != null) vm.setMoneda(value);
           },
         ),
       ),
     );
-    final intercambiar = IconButton(
-      tooltip: 'Intercambiar sentido',
-      onPressed: vm.tasaActual > 0 ? vm.toggleDireccion : null,
-      icon: const Icon(Icons.swap_horiz),
-      visualDensity: VisualDensity.compact,
-    );
     final ves = Container(
-      constraints: const BoxConstraints(minWidth: 56),
+      key: const Key('ves-pair-label'),
+      constraints: const BoxConstraints(minWidth: 72),
       alignment: vm.esMonedaAVes ? Alignment.centerRight : Alignment.centerLeft,
       child: Text(
-        'VES',
-        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.w600,
-        ),
+        etiquetaMoneda('VES'),
+        style: Theme.of(
+          context,
+        ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
       ),
     );
-
-    return Row(
+    final monedas = Row(
       children: vm.esMonedaAVes
-          ? [selector, intercambiar, ves]
-          : [ves, intercambiar, selector],
+          ? [
+              selector,
+              const SizedBox(width: 10),
+              const Icon(Icons.arrow_forward, size: 20),
+              const SizedBox(width: 10),
+              ves,
+            ]
+          : [
+              ves,
+              const SizedBox(width: 10),
+              const Icon(Icons.arrow_forward, size: 20),
+              const SizedBox(width: 10),
+              selector,
+            ],
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        monedas,
+        const SizedBox(height: 6),
+        SizedBox(
+          height: 42,
+          child: OutlinedButton.icon(
+            key: const Key('swap-direction-button'),
+            onPressed: vm.tasaActual > 0 ? vm.toggleDireccion : null,
+            icon: const Icon(Icons.swap_horiz),
+            label: Text('Intercambiar VES y ${vm.moneda}'),
+          ),
+        ),
+      ],
     );
   }
 
@@ -342,8 +410,39 @@ class _ConversorBodyState extends State<_ConversorBody>
     ),
   );
 
+  Widget _buildSecondaryActions(
+    ConversorViewmodel vm,
+    SettingsProvider settings,
+  ) => Row(
+    children: [
+      Expanded(
+        child: SizedBox(
+          height: 52,
+          child: FilledButton.tonalIcon(
+            onPressed: vm.moneda == 'USDT'
+                ? null
+                : () => mostrarCalendarioTasa(context, vm),
+            icon: const Icon(Icons.calendar_month_outlined),
+            label: const Text('Calendario'),
+          ),
+        ),
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: SizedBox(
+          height: 52,
+          child: FilledButton.tonalIcon(
+            onPressed: () => _abrirAjustes(settings),
+            icon: const Icon(Icons.settings_outlined),
+            label: const Text('Ajustes'),
+          ),
+        ),
+      ),
+    ],
+  );
+
   Widget _buildRateSummary(BuildContext context, ConversorViewmodel vm) {
-    final formatoTasa = NumberFormat('#,##0.####', 'es_VE');
+    final formatoTasa = NumberFormat('#,##0.00', 'es_VE');
     final formatoFecha = DateFormat('dd/MM/yyyy', 'es_VE');
     final tasaDisponible = vm.moneda == 'USDT'
         ? vm.cotizacionUsdt != null
@@ -428,9 +527,9 @@ class _ConversorBodyState extends State<_ConversorBody>
                               : 'Fecha efectiva antigua · verifica el valor',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: colorEstado,
-                          ),
+                          style: Theme.of(
+                            context,
+                          ).textTheme.labelSmall?.copyWith(color: colorEstado),
                         ),
                       ),
                   ],
@@ -457,7 +556,9 @@ class _ConversorBodyState extends State<_ConversorBody>
         Align(
           alignment: Alignment.centerRight,
           child: TextButton.icon(
-            onPressed: vm.moneda == 'USDT' ? vm.refrescarUsdt : vm.refrescarTasa,
+            onPressed: vm.moneda == 'USDT'
+                ? vm.refrescarUsdt
+                : vm.refrescarTasa,
             icon: const Icon(Icons.refresh, size: 18),
             label: const Text('Reintentar'),
           ),
@@ -470,7 +571,8 @@ class _ConversorBodyState extends State<_ConversorBody>
     final aplicada = vm.fechaEfectivaAplicada ?? vm.tasa?.fechaEfectiva;
     final solicitada = vm.fechaSeleccionada;
     if (solicitada != null) {
-      final esProxima = vm.fechaTasaSiguiente != null &&
+      final esProxima =
+          vm.fechaTasaSiguiente != null &&
           _mismaFecha(solicitada, vm.fechaTasaSiguiente!);
       if (esProxima) return 'Próxima · ${formatoFecha.format(solicitada)}';
       return aplicada == null
@@ -478,7 +580,9 @@ class _ConversorBodyState extends State<_ConversorBody>
           : 'Histórico · ${formatoFecha.format(solicitada)} → ${formatoFecha.format(aplicada)}';
     }
 
-    final fecha = aplicada == null ? 'Fecha efectiva pendiente' : 'Fecha valor ${formatoFecha.format(aplicada)}';
+    final fecha = aplicada == null
+        ? 'Fecha efectiva pendiente'
+        : 'Fecha valor ${formatoFecha.format(aplicada)}';
     final estadoCache = vm.resultadoTasa?.vieneDeCache == true
         ? ' · tasa guardada'
         : '';
@@ -510,12 +614,12 @@ class _ConversorBodyState extends State<_ConversorBody>
   ) async {
     final valor = double.tryParse(vm.resultado.replaceAll(',', '.'));
     if (valor == null) return;
-    final texto = '${vm.labelDestino}: ${formato.format(valor)}';
+    final texto = formato.format(valor);
     await Clipboard.setData(ClipboardData(text: texto));
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Resultado copiado')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Resultado copiado')));
   }
 
   Future<void> _escanearPrecio() async {

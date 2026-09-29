@@ -7,7 +7,9 @@ import '../models/resultado_tasa.dart';
 import '../models/tasa_bcv.dart';
 import '../services/feriados_service.dart';
 import '../services/tasa_repository.dart';
+import '../utils/currency_labels.dart';
 import '../utils/feriados_ve.dart';
+import '../utils/numeros_ocr.dart';
 
 enum ConversionDireccion { monedaAVes, vesAMoneda }
 
@@ -80,8 +82,8 @@ class ConversorViewmodel extends ChangeNotifier {
 
   DateTime? get fechaEfectivaAplicada => _tasa?.fechaEfectiva;
 
-  String get labelOrigen => esMonedaAVes ? _moneda : 'Bolívares (VES)';
-  String get labelDestino => esMonedaAVes ? 'Bolívares (VES)' : _moneda;
+  String get labelOrigen => etiquetaMoneda(esMonedaAVes ? _moneda : 'VES');
+  String get labelDestino => etiquetaMoneda(esMonedaAVes ? 'VES' : _moneda);
 
   Future<void> cargarTasa() async {
     final generacion = ++_cargaGeneracion;
@@ -375,7 +377,7 @@ class ConversorViewmodel extends ChangeNotifier {
     final texto = _entrada.trim().replaceAll(',', '.');
     if (texto.isEmpty ||
         texto.endsWith('.') ||
-        !RegExp(r'^\d+(\.\d{1,4})?$').hasMatch(texto) ||
+        !RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(texto) ||
         !tasa.isFinite ||
         tasa <= 0) {
       _limpiarResultado();
@@ -397,7 +399,7 @@ class ConversorViewmodel extends ChangeNotifier {
       _limpiarResultado();
     } else {
       _resultado = resultado.toStringAsFixed(2);
-      _resultadoPreciso = resultado.toStringAsFixed(4);
+      _resultadoPreciso = _resultado;
     }
     if (notificar) _notificar();
   }
@@ -407,15 +409,14 @@ class ConversorViewmodel extends ChangeNotifier {
     required String monto,
     required String moneda,
   }) async {
+    final valorMonto =
+        parsearNumero(monto) ?? extraerNumeros(monto).firstOrNull?.valor;
+    final montoNormalizado = valorMonto == null
+        ? monto
+        : formatearMonto(valorMonto);
     final divisa = moneda.toUpperCase().trim();
     final esVes = const {'VES', 'BS', 'BS.'}.contains(divisa);
-    const monedasSoportadas = {
-      'USD',
-      r'US$',
-      'EUR',
-      '€',
-      'USDT',
-    };
+    const monedasSoportadas = {'USD', r'US$', 'EUR', '€', 'USDT'};
     final esDivisaSoportada = monedasSoportadas.contains(divisa);
     final fechaHistoricaAnterior = _fechaSeleccionada != null;
     final generacion = ++_monedaGeneracion;
@@ -439,11 +440,11 @@ class ConversorViewmodel extends ChangeNotifier {
     _errorUsdt = '';
     variacion = null;
 
-    _entrada = monto;
+    _entrada = montoNormalizado;
     _entradaInterpretada = true;
     entradaController.value = TextEditingValue(
-      text: monto,
-      selection: TextSelection.collapsed(offset: monto.length),
+      text: montoNormalizado,
+      selection: TextSelection.collapsed(offset: montoNormalizado.length),
     );
     convertir(notificar: false);
     _notificar();

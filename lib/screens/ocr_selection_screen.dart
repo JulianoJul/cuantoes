@@ -31,8 +31,15 @@ class _OcrSelectionScreenState extends State<OcrSelectionScreen> {
   DocumentoOcr? _documento;
   Object? _error;
   final Set<String> _seleccion = {};
+  final ScrollController _textoAccesibleController = ScrollController();
   int? _anclaArrastre;
   bool _procesando = true;
+
+  @override
+  void dispose() {
+    _textoAccesibleController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -245,7 +252,11 @@ class _OcrSelectionScreenState extends State<OcrSelectionScreen> {
                   ),
                   for (final numero in candidatos)
                     ListTile(
-                      title: Text(numero.texto),
+                      title: Text(
+                        numero.separadorAmbiguo
+                            ? numero.texto
+                            : formatearMonto(numero.valor),
+                      ),
                       subtitle: numero.separadorAmbiguo
                           ? const Text('Revisar separador de miles/decimales')
                           : null,
@@ -258,12 +269,12 @@ class _OcrSelectionScreenState extends State<OcrSelectionScreen> {
     if (candidato == null || !mounted) return;
 
     final resultado = await showDialog<TransferenciaOcr>(
-        context: context,
-        builder: (context) => _EditarMontoOcrDialog(
-          candidato: candidato,
-          monedaInicial: _monedaSugerida(candidato),
-          monedaConversor: widget.monedaConversor,
-        ),
+      context: context,
+      builder: (context) => _EditarMontoOcrDialog(
+        candidato: candidato,
+        monedaInicial: _monedaSugerida(candidato),
+        monedaConversor: widget.monedaConversor,
+      ),
     );
     if (resultado != null && mounted) Navigator.pop(context, resultado);
   }
@@ -373,9 +384,7 @@ class _OcrSelectionScreenState extends State<OcrSelectionScreen> {
                     child: Row(
                       children: [
                         const Expanded(
-                          child: Text(
-                            'No se detectó texto en esta imagen.',
-                          ),
+                          child: Text('No se detectó texto en esta imagen.'),
                         ),
                         TextButton(
                           onPressed: widget.onElegirOtraImagen == null
@@ -428,14 +437,14 @@ class _OcrSelectionScreenState extends State<OcrSelectionScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                   Image.file(File(_rutaImagenActual), fit: BoxFit.contain),
-                   CustomPaint(
-                     painter: _OverlayOcrPainter(
-                       documento: documento,
-                       mapper: mapper,
-                       seleccion: Set<String>.unmodifiable(_seleccion),
-                       color: Theme.of(context).colorScheme.primary,
-                     ),
+                  Image.file(File(_rutaImagenActual), fit: BoxFit.contain),
+                  CustomPaint(
+                    painter: _OverlayOcrPainter(
+                      documento: documento,
+                      mapper: mapper,
+                      seleccion: Set<String>.unmodifiable(_seleccion),
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                   ),
                 ],
               ),
@@ -450,6 +459,8 @@ class _OcrSelectionScreenState extends State<OcrSelectionScreen> {
     return ExpansionTile(
       tilePadding: const EdgeInsets.symmetric(horizontal: 16),
       title: const Text('Texto accesible'),
+      subtitle: const Text('Despliega y desliza para recorrer todo'),
+      trailing: const Icon(Icons.unfold_more),
       children: [
         if (_lineas.isEmpty)
           Padding(
@@ -459,27 +470,32 @@ class _OcrSelectionScreenState extends State<OcrSelectionScreen> {
         else
           SizedBox(
             height: 130,
-            child: ListView(
-              children: [
-                for (final linea in _lineas)
-                  InkWell(
-                    onTap: () => _seleccionarLinea(linea),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 6,
-                      ),
-                      child: Semantics(
-                        button: true,
-                        label:
-                            'Seleccionar línea: ${linea.map((r) => r.texto).join(' ')}',
-                        child: SelectableText(
-                          linea.map((r) => r.texto).join(' '),
+            child: Scrollbar(
+              controller: _textoAccesibleController,
+              thumbVisibility: true,
+              child: ListView(
+                controller: _textoAccesibleController,
+                children: [
+                  for (final linea in _lineas)
+                    InkWell(
+                      onTap: () => _seleccionarLinea(linea),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 6,
+                        ),
+                        child: Semantics(
+                          button: true,
+                          label:
+                              'Seleccionar línea: ${linea.map((r) => r.texto).join(' ')}',
+                          child: SelectableText(
+                            linea.map((r) => r.texto).join(' '),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
       ],
@@ -664,7 +680,11 @@ class _EditarMontoOcrDialogState extends State<_EditarMontoOcrDialog> {
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.candidato.texto);
+    _controller = TextEditingController(
+      text: widget.candidato.separadorAmbiguo
+          ? widget.candidato.texto
+          : formatearMonto(widget.candidato.valor),
+    );
     _moneda = const {'USD', 'EUR', 'USDT', 'VES'}.contains(widget.monedaInicial)
         ? widget.monedaInicial
         : 'USD';
@@ -692,10 +712,9 @@ class _EditarMontoOcrDialogState extends State<_EditarMontoOcrDialog> {
       setState(() => _error = 'Revisa el monto y sus separadores');
       return;
     }
-    final monto = valor.toStringAsFixed(4).replaceFirst(RegExp(r'\.?0+$'), '');
     Navigator.pop(
       context,
-      TransferenciaOcr(monto: monto.replaceAll('.', ','), moneda: _moneda),
+      TransferenciaOcr(monto: formatearMonto(valor), moneda: _moneda),
     );
   }
 

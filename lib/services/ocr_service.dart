@@ -19,16 +19,28 @@ class OcrException implements Exception {
   String get mensajeUsuario => switch (etapa) {
     OcrEtapa.lectura => 'No se pudo abrir el archivo de imagen.',
     OcrEtapa.decodificacion => 'El formato de esta imagen no se pudo procesar.',
-    OcrEtapa.reconocimiento => 'Falló el reconocimiento de texto en el dispositivo.',
-    OcrEtapa.adaptacion => 'Se reconoció la imagen, pero no se pudieron preparar sus regiones.',
+    OcrEtapa.reconocimiento =>
+      'Falló el reconocimiento de texto en el dispositivo.',
+    OcrEtapa.adaptacion =>
+      'Se reconoció la imagen, pero no se pudieron preparar sus regiones.',
   };
 
   String get detalleTecnico => switch (causa) {
-    PlatformException exception => 'PlatformException (${exception.code})',
+    PlatformException exception => _detallePlatformException(exception),
     FileSystemException exception =>
       'FileSystemException (código ${exception.osError?.errorCode ?? 'desconocido'})',
     _ => causa.runtimeType.toString(),
   };
+
+  static String _detallePlatformException(PlatformException exception) {
+    final mensaje = exception.message?.trim();
+    final detalles = exception.details?.toString().trim();
+    return [
+      'PlatformException (${exception.code})',
+      if (mensaje != null && mensaje.isNotEmpty) mensaje,
+      if (detalles != null && detalles.isNotEmpty) detalles,
+    ].join(' · ');
+  }
 
   @override
   String toString() => 'OcrException(${etapa.name}): $detalleTecnico';

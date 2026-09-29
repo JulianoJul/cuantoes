@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models/resultado_tasa.dart';
-import '../utils/feriados_ve.dart';
 import '../viewmodels/conversor_viewmodel.dart';
+import 'rate_date_picker.dart';
 
 class RatesSheet extends StatelessWidget {
   final ConversorViewmodel viewModel;
@@ -16,7 +16,7 @@ class RatesSheet extends StatelessWidget {
       animation: viewModel,
       builder: (context, _) {
         final vm = viewModel;
-        final formatoTasa = NumberFormat('#,##0.####', 'es_VE');
+        final formatoTasa = NumberFormat('#,##0.00', 'es_VE');
         final formatoFecha = DateFormat('dd/MM/yyyy', 'es_VE');
         final alturaMaxima = MediaQuery.sizeOf(context).height * 0.9;
 
@@ -116,7 +116,7 @@ class RatesSheet extends StatelessWidget {
                 ),
                 IconButton(
                   tooltip: 'Elegir fecha histórica',
-                  onPressed: () => _abrirCalendario(context),
+                  onPressed: () => mostrarCalendarioTasa(context, vm),
                   icon: const Icon(Icons.calendar_month_outlined),
                 ),
               ],
@@ -147,7 +147,8 @@ class RatesSheet extends StatelessWidget {
               ),
             ),
           ),
-        ] else if (vm.tasaSiguienteDisponible && vm.fechaTasaSiguiente != null) ...[
+        ] else if (vm.tasaSiguienteDisponible &&
+            vm.fechaTasaSiguiente != null) ...[
           const SizedBox(height: 8),
           Card.outlined(
             child: ListTile(
@@ -241,10 +242,7 @@ class RatesSheet extends StatelessWidget {
   ) => Row(
     children: [
       Expanded(
-        child: Text(
-          moneda,
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
+        child: Text(moneda, style: Theme.of(context).textTheme.titleMedium),
       ),
       Flexible(
         child: Text(
@@ -277,7 +275,9 @@ class RatesSheet extends StatelessWidget {
       );
     }
 
-    final antiguedad = DateTime.now().toUtc().difference(cotizacion.obtenidaEnUtc);
+    final antiguedad = DateTime.now().toUtc().difference(
+      cotizacion.obtenidaEnUtc,
+    );
     final consultada = antiguedad.inMinutes < 1
         ? 'hace menos de 1 min'
         : antiguedad.inHours < 1
@@ -290,7 +290,10 @@ class RatesSheet extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Referencia P2P', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'Referencia P2P',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 12),
             Text(
               '1 USDT = Bs. ${formatoTasa.format(cotizacion.valor)}',
@@ -324,32 +327,5 @@ class RatesSheet extends StatelessWidget {
   String _fechaHoraVenezuela(DateTime fechaUtc) {
     final venezuela = fechaUtc.toUtc().subtract(const Duration(hours: 4));
     return DateFormat('dd/MM/yyyy HH:mm', 'es_VE').format(venezuela);
-  }
-
-  Future<void> _abrirCalendario(BuildContext context) async {
-    final ahora = ahoraVenezuela();
-    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
-    final primera = DateTime(2016, 1, 1);
-    final maxima = viewModel.fechaMaximaSeleccionable;
-    final solicitada = viewModel.fechaSeleccionada ??
-        viewModel.tasa?.fechaEfectiva ??
-        hoy;
-    final inicial = _limitarFecha(solicitada, primera, maxima);
-    final elegida = await showDatePicker(
-      context: context,
-      initialDate: inicial,
-      firstDate: primera,
-      lastDate: maxima,
-      locale: const Locale('es'),
-      helpText: 'Consultar tasa BCV',
-    );
-    if (elegida != null) await viewModel.seleccionarFecha(elegida);
-  }
-
-  DateTime _limitarFecha(DateTime fecha, DateTime primera, DateTime maxima) {
-    final dia = DateTime(fecha.year, fecha.month, fecha.day);
-    if (dia.isBefore(primera)) return primera;
-    if (dia.isAfter(maxima)) return maxima;
-    return dia;
   }
 }

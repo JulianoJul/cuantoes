@@ -10,6 +10,7 @@ class HomeWidgetService {
   static const providerName = 've.cuantoes.cuantoes.BcvWidgetProvider';
   static const compactProviderName =
       've.cuantoes.cuantoes.BcvCompactWidgetProvider';
+  static const presetAmountsKey = 'widget_converter_presets';
 
   Future<void> publicar(ResultadoTasa resultado) async {
     if (!Platform.isAndroid) return;
@@ -34,6 +35,24 @@ class HomeWidgetService {
       await HomeWidget.updateWidget(qualifiedAndroidName: compactProviderName);
     } catch (_) {
       // Compact-widget preferences are optional on devices without a launcher widget.
+    }
+  }
+
+  Future<void> actualizarValoresPredefinidos(List<int> valores) async {
+    if (!Platform.isAndroid ||
+        valores.length != 4 ||
+        valores.toSet().length != 4 ||
+        valores.any((valor) => valor <= 0 || valor > 999999)) {
+      return;
+    }
+    try {
+      await HomeWidget.saveWidgetData<String>(
+        presetAmountsKey,
+        jsonEncode(valores),
+      );
+      await HomeWidget.updateWidget(qualifiedAndroidName: providerName);
+    } catch (_) {
+      // La configuración se conserva aunque no haya un widget instalado.
     }
   }
 

@@ -121,7 +121,9 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
         setState(() => _capturando = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('No se pudo ajustar la foto al encuadre 4:3. Intenta otra vez.'),
+            content: Text(
+              'No se pudo ajustar la foto al encuadre 4:3. Intenta otra vez.',
+            ),
           ),
         );
       }
@@ -129,7 +131,9 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
       if (mounted) {
         setState(() => _capturando = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No se pudo preparar la foto para escanear.')),
+          const SnackBar(
+            content: Text('No se pudo preparar la foto para escanear.'),
+          ),
         );
       }
     } catch (_) {
@@ -164,11 +168,8 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
     DeviceOrientation.landscapeRight,
   }.contains(controller.value.deviceOrientation);
 
-  double _aspectRatioObjetivo(CameraController controller) => _esHorizontal(
-    controller,
-  )
-      ? _ratioFotoHorizontal
-      : _ratioFotoVertical;
+  double _aspectRatioObjetivo(CameraController controller) =>
+      _esHorizontal(controller) ? _ratioFotoHorizontal : _ratioFotoVertical;
 
   Widget _visorCuatroATres(CameraController controller) {
     final horizontal = _esHorizontal(controller);
@@ -269,9 +270,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                Expanded(
-                  child: _visorCuatroATres(controller),
-                ),
+                Expanded(child: _visorCuatroATres(controller)),
                 const Padding(
                   padding: EdgeInsets.only(top: 12),
                   child: Text(

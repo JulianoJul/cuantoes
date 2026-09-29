@@ -2,7 +2,7 @@ import 'resultado_tasa.dart';
 
 /// Values shared with Android RemoteViews through home_widget preferences.
 class WidgetSnapshot {
-  static const version = 2;
+  static const version = 3;
   static const keyPayload = 'widget_snapshot_payload';
   static const keyVersion = 'widget_snapshot_version';
   static const keyUsd = 'widget_usd_rate';
@@ -15,6 +15,8 @@ class WidgetSnapshot {
 
   final String usd;
   final String eur;
+  final double usdValue;
+  final double eurValue;
   final String effectiveDate;
   final String validatedAt;
   final String source;
@@ -24,6 +26,8 @@ class WidgetSnapshot {
   const WidgetSnapshot({
     required this.usd,
     required this.eur,
+    required this.usdValue,
+    required this.eurValue,
     required this.effectiveDate,
     required this.validatedAt,
     required this.source,
@@ -35,6 +39,8 @@ class WidgetSnapshot {
     'version': version,
     'usd': usd,
     'eur': eur,
+    'usdValue': usdValue,
+    'eurValue': eurValue,
     'effectiveDate': effectiveDate,
     'validatedAt': validatedAt,
     'validatedAtUtc': validatedAtUtc?.toUtc().toIso8601String(),
@@ -61,6 +67,8 @@ class WidgetSnapshot {
     return WidgetSnapshot(
       usd: _formatearTasa(tasa.usd),
       eur: _formatearTasa(tasa.eur),
+      usdValue: tasa.usd,
+      eurValue: tasa.eur,
       effectiveDate: _fecha(tasa.fechaEfectiva),
       validatedAt: validatedAt,
       source: _nombreFuente(tasa.origen),
@@ -73,13 +81,13 @@ class WidgetSnapshot {
       fecha.toUtc().subtract(const Duration(hours: 4));
 
   static String _formatearTasa(double value) {
-    final raw = value.toStringAsFixed(4).replaceFirst(RegExp(r'\.?0+$'), '');
+    final raw = value.toStringAsFixed(2);
     final partes = raw.split('.');
     final entero = partes.first.replaceAllMapped(
       RegExp(r'\B(?=(\d{3})+(?!\d))'),
       (_) => '.',
     );
-    return partes.length == 1 ? entero : '$entero,${partes.last}';
+    return '$entero,${partes.last}';
   }
 
   static String _fecha(DateTime fecha) =>

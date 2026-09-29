@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="widget_bcv_name">Cuantoes · Tasas BCV</string>
-    <string name="widget_bcv_description">Tasas oficiales USD y EUR, fecha efectiva y estado de actualización.</string>
-    <string name="widget_bcv_compact_name">Cuantoes · Tasa compacta</string>
-    <string name="widget_bcv_compact_description">Una tasa BCV compacta. Configura USD o EUR desde Cuantoes.</string>
+    <string name="widget_bcv_name">Cuantoes · Conversor rápido</string>
+    <string name="widget_bcv_description">Convierte montos rápidos entre USD/EUR y bolívares desde el inicio.</string>
+    <string name="widget_bcv_compact_name">Cuantoes · Conversor compacto</string>
+    <string name="widget_bcv_compact_description">Conversión compacta de una unidad entre USD/EUR y bolívares.</string>
 </resources>

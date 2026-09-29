@@ -3,6 +3,7 @@ package ve.cuantoes.cuantoes
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import androidx.exifinterface.media.ExifInterface
@@ -16,9 +17,28 @@ import java.util.concurrent.Executors
 class MainActivity : FlutterActivity() {
     private val imageExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var widgetActionChannel: MethodChannel? = null
+    private var pendingFocusAmount = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        pendingFocusAmount = pendingFocusAmount || intent?.getBooleanExtra(EXTRA_FOCUS_AMOUNT, false) == true
+        widgetActionChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            WIDGET_ACTION_CHANNEL,
+        ).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                if (call.method != METHOD_CONSUME_FOCUS_AMOUNT) {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                val shouldFocus = pendingFocusAmount
+                pendingFocusAmount = false
+                intent?.removeExtra(EXTRA_FOCUS_AMOUNT)
+                result.success(shouldFocus)
+            }
+        }
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -55,7 +75,23 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_FOCUS_AMOUNT, false)) {
+            intent.removeExtra(EXTRA_FOCUS_AMOUNT)
+            val channel = widgetActionChannel
+            if (channel == null) {
+                pendingFocusAmount = true
+            } else {
+                channel.invokeMethod(METHOD_FOCUS_AMOUNT, null)
+            }
+        }
+    }
+
     override fun onDestroy() {
+        widgetActionChannel?.setMethodCallHandler(null)
+        widgetActionChannel = null
         imageExecutor.shutdown()
         super.onDestroy()
     }
@@ -159,5 +195,9 @@ class MainActivity : FlutterActivity() {
         const val METHOD_CROP_TO_ASPECT_RATIO = "cropToAspectRatio"
         const val ARG_PATH = "path"
         const val ARG_ASPECT_RATIO = "aspectRatio"
+        const val EXTRA_FOCUS_AMOUNT = "focus_amount"
+        const val WIDGET_ACTION_CHANNEL = "ve.cuantoes/widget_action"
+        const val METHOD_CONSUME_FOCUS_AMOUNT = "consumeFocusAmount"
+        const val METHOD_FOCUS_AMOUNT = "focusAmount"
     }
 }

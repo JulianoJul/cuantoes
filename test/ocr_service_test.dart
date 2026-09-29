@@ -1,6 +1,6 @@
 import 'dart:math';
-import 'dart:ui';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 
@@ -9,6 +9,19 @@ import 'package:cuantoes/utils/ocr_coordinate_mapper.dart';
 import 'package:cuantoes/models/documento_ocr.dart';
 
 void main() {
+  test('OCR conserva el mensaje nativo en los detalles técnicos', () {
+    final error = OcrException(
+      etapa: OcrEtapa.reconocimiento,
+      causa: PlatformException(
+        code: 'TextRecognizerError',
+        message: 'MlKitException: model failed to initialize',
+      ),
+    );
+
+    expect(error.detalleTecnico, contains('TextRecognizerError'));
+    expect(error.detalleTecnico, contains('model failed to initialize'));
+  });
+
   test('OCR conserva regiones, orden, geometría y divisa contextual', () {
     final moneda = _elemento('Bs.', 10, 20, 24, 12);
     final monto = _elemento('185,00', 40, 20, 48, 12);

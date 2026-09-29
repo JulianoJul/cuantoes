@@ -8,4 +8,6 @@
     <color name="widget_text_secondary">#FFC3C6D7</color>
     <color name="widget_text_subtle">#FF8D90A0</color>
     <color name="widget_status">#FF68DBA9</color>
+    <color name="widget_action_background">#FF25304B</color>
+    <color name="widget_preset_background">#FF222B40</color>
 </resources>

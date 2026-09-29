@@ -23,8 +23,11 @@ void main() {
 
     final snapshot = WidgetSnapshot.fromResultadoTasa(resultado);
 
-    expect(snapshot.usd, '855,6625');
-    expect(snapshot.eur, '972,6487');
+    expect(snapshot.usd, '855,66');
+    expect(snapshot.eur, '972,65');
+    expect(snapshot.usdValue, 855.6625);
+    expect(snapshot.eurValue, 972.648677);
+    expect(snapshot.toJson()['version'], 3);
     expect(snapshot.effectiveDate, '25/09/2026');
     expect(snapshot.validatedAt, 'Validada 27/09 13:00');
     expect(snapshot.source, 'DolarAPI');

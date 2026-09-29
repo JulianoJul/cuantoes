@@ -1,109 +1,147 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_bcv_background"
-    android:gravity="center_vertical"
-    android:orientation="vertical"
-    android:padding="16dp">
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="CUANTOES · BCV"
-        android:textColor="@color/widget_accent"
-        android:textSize="11sp"
-        android:textStyle="bold" />
+    android:padding="4dp">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="match_parent"
+        android:background="@drawable/widget_bcv_background"
+        android:clipToOutline="true"
         android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingTop="5dp">
+        android:orientation="vertical"
+        android:outlineProvider="background"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="10dp">
 
         <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:layout_width="match_parent"
+            android:layout_height="28dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
             <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="USD"
-                android:textColor="@color/widget_text_secondary"
-                android:textSize="12sp" />
-            <TextView
-                android:id="@+id/widget_usd_rate"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
+                android:id="@+id/widget_pair_button"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@drawable/widget_action_background"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="10dp"
                 android:singleLine="true"
-                android:text="—"
-                android:textColor="@color/widget_text_primary"
-                android:textSize="23sp"
+                android:text="USD ($) ▾  →  VES (Bs.)"
+                android:textColor="@color/widget_accent"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/widget_swap_button"
+                android:layout_width="36dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/widget_action_background"
+                android:contentDescription="Intercambiar sentido"
+                android:gravity="center"
+                android:text="⇄"
+                android:textColor="@color/widget_accent"
+                android:textSize="18sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
-        <ImageView
-            android:layout_width="1dp"
-            android:layout_height="42dp"
-            android:layout_marginHorizontal="12dp"
-            android:background="@color/widget_divider"
-            android:contentDescription="@null"
-            android:importantForAccessibility="no" />
-
         <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
             android:layout_weight="1"
-            android:orientation="vertical">
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingTop="5dp"
+            android:paddingBottom="4dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="0.8"
+                android:orientation="vertical">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="MONTO"
+                    android:textColor="@color/widget_text_subtle"
+                    android:textSize="9sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/widget_amount"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:text="1,00 USD"
+                    android:textColor="@color/widget_text_secondary"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="EUR"
-                android:textColor="@color/widget_text_secondary"
-                android:textSize="12sp" />
-            <TextView
-                android:id="@+id/widget_eur_rate"
-                android:layout_width="match_parent"
+                android:layout_marginHorizontal="7dp"
+                android:text="→"
+                android:textColor="@color/widget_text_subtle"
+                android:textSize="18sp" />
+
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:singleLine="true"
-                android:text="—"
-                android:textColor="@color/widget_text_primary"
-                android:textSize="23sp"
-                android:textStyle="bold" />
+                android:layout_weight="1.2"
+                android:gravity="end"
+                android:orientation="vertical">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="RESULTADO"
+                    android:textColor="@color/widget_text_subtle"
+                    android:textSize="9sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/widget_result"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:gravity="end"
+                    android:singleLine="true"
+                    android:text="—"
+                    android:textColor="@color/widget_text_primary"
+                    android:textSize="21sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="30dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/widget_amount_1"
+                style="@style/WidgetPresetButton"
+                android:text="1" />
+            <TextView
+                android:id="@+id/widget_amount_10"
+                style="@style/WidgetPresetButton"
+                android:layout_marginStart="6dp"
+                android:text="10" />
+            <TextView
+                android:id="@+id/widget_amount_50"
+                style="@style/WidgetPresetButton"
+                android:layout_marginStart="6dp"
+                android:text="50" />
+            <TextView
+                android:id="@+id/widget_amount_100"
+                style="@style/WidgetPresetButton"
+                android:layout_marginStart="6dp"
+                android:text="100" />
         </LinearLayout>
     </LinearLayout>
-
-    <TextView
-        android:id="@+id/widget_effective_date"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:ellipsize="end"
-        android:singleLine="true"
-        android:text="Abre Cuantoes para cargar tasas"
-        android:textColor="@color/widget_text_secondary"
-        android:textSize="11sp" />
-    <TextView
-        android:id="@+id/widget_source"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:ellipsize="end"
-        android:singleLine="true"
-        android:text="BCV · USD / EUR"
-        android:textColor="@color/widget_text_subtle"
-        android:textSize="10sp" />
-    <TextView
-        android:id="@+id/widget_status"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:ellipsize="end"
-        android:singleLine="true"
-        android:text="Toca para consultar"
-        android:textColor="@color/widget_status"
-        android:textSize="10sp" />
-</LinearLayout>
+</FrameLayout>

@@ -7,7 +7,9 @@ class AutomaticCommaFormatter extends TextInputFormatter {
 
   @override
   TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue, TextEditingValue newValue) {
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
     if (!active) return newValue;
 
     // Si el usuario intentó borrar todo, dejarlo en 0,00

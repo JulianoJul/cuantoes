@@ -1,38 +1,49 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_compact_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_bcv_background"
-    android:gravity="center_vertical"
-    android:orientation="vertical"
-    android:paddingHorizontal="12dp"
-    android:paddingVertical="8dp">
-    <TextView
-        android:id="@+id/widget_compact_currency"
+    android:padding="4dp">
+
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="USD · BCV"
-        android:textColor="@color/widget_accent"
-        android:textSize="10sp"
-        android:textStyle="bold" />
-    <TextView
-        android:id="@+id/widget_compact_rate"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:ellipsize="end"
-        android:singleLine="true"
-        android:text="Sin dato · abre Cuantoes"
-        android:textColor="@color/widget_text_primary"
-        android:textSize="17sp"
-        android:textStyle="bold" />
-    <TextView
-        android:id="@+id/widget_compact_footer"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:ellipsize="end"
-        android:singleLine="true"
-        android:text="BCV"
-        android:textColor="@color/widget_text_secondary"
-        android:textSize="9sp" />
-</LinearLayout>
+        android:layout_height="match_parent"
+        android:background="@drawable/widget_bcv_background"
+        android:clipToOutline="true"
+        android:gravity="center_vertical"
+        android:orientation="vertical"
+        android:outlineProvider="background"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="10dp">
+        <TextView
+            android:id="@+id/widget_compact_currency"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:text="1,00 USD ($)"
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+        <TextView
+            android:id="@+id/widget_compact_rate"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:text="Sin tasa"
+            android:textColor="@color/widget_text_primary"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+        <TextView
+            android:id="@+id/widget_compact_footer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:text="USD → VES"
+            android:textColor="@color/widget_accent"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+</FrameLayout>

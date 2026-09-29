@@ -27,6 +27,18 @@ void main() {
     expect(extraerNumeros('Precio total'), isEmpty);
   });
 
+  test('extrae montos unidos a su moneda e ignora las letras', () {
+    final bolivares = extraerNumeros('4bs').single;
+    final dolares = extraerNumeros('100usd').single;
+
+    expect(bolivares.texto, '4');
+    expect(bolivares.monedaSugerida, 'VES');
+    expect(formatearMonto(bolivares.valor), '4,00');
+    expect(dolares.texto, '100');
+    expect(dolares.monedaSugerida, 'USD');
+    expect(formatearMonto(dolares.valor), '100,00');
+  });
+
   test('extrae apariciones en orden y conserva tokens repetidos', () {
     final numeros = extraerNumeros('Bs. 848,5458 y USD 10.50; repetido 10,50');
 

@@ -250,4 +250,32 @@ void main() {
     expect(vm.entrada, '20,00');
     expect(vm.resultado, '0.20');
   });
+
+  test('monto OCR ignora letras y se normaliza a dos decimales', () async {
+    final repository = _FakeTasaRepository()
+      ..actual = _tasa(usd: 100, eur: 110, efectiva: _hoyVenezuela());
+    final vm = ConversorViewmodel(repository: repository);
+    addTearDown(vm.dispose);
+
+    await vm.cargarTasa();
+    await vm.aplicarMontoEscaneado(monto: '4bs', moneda: 'VES');
+
+    expect(vm.entrada, '4,00');
+    expect(vm.entradaController.text, '4,00');
+    expect(vm.resultado, '0.04');
+    expect(vm.resultadoPreciso, '0.04');
+  });
+
+  test('la entrada manual admite como máximo dos decimales', () async {
+    final repository = _FakeTasaRepository()
+      ..actual = _tasa(usd: 100, eur: 110, efectiva: _hoyVenezuela());
+    final vm = ConversorViewmodel(repository: repository);
+    addTearDown(vm.dispose);
+
+    await vm.cargarTasa();
+    vm.setEntrada('1,23');
+    expect(vm.resultado, '123.00');
+    vm.setEntrada('1,234');
+    expect(vm.resultado, isEmpty);
+  });
 }

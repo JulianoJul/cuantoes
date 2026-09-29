@@ -9,20 +9,20 @@
 Antes de modificar o agregar funcionalidad, sigue este algoritmo:
 
 ### Fase 1: Lectura
-- Revisa `docs/ai-context.md` (líneas rojas, stack, estado actual)
-- Revisa `docs/funciones.md` (catálogo de funciones — NO duplicar)
+- Revisa `docs/arquitectura.md` (líneas rojas, stack y catálogo — NO duplicar)
 - Revisa `docs/decisiones.md` (ADRs previos)
+- Si la tarea cruza Android nativo, revisa `docs/validacion.md`
 
 ### Fase 2: Anti-Duplicación (DRY)
-- Si la tarea requiere una utilidad, USA las funciones registradas en `docs/funciones.md`.
+- Si la tarea requiere una utilidad, USA las funciones registradas en `docs/arquitectura.md`.
 - Queda prohibido reescribir lógica idéntica.
 
 ### Fase 3: Registro (si creas función nueva)
 - Solo si NO existe ninguna función similar.
 - Prográmala siguiendo las líneas rojas (sin hardcodeo, sin efectos secundarios, SoC, SPOT).
-- REGISTRA la nueva función en `docs/funciones.md` de inmediato: nombre, parámetros, descripción, capa.
+- REGISTRA la nueva función compartida en `docs/arquitectura.md`: nombre, descripción y capa.
 
-### Fase 4: Commit
+### Fase 4: Commit (solo si el usuario lo pide)
 - Formato obligatorio:
   ```
   feat/fix: [Descripción breve]

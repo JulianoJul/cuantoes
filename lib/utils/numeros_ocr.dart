@@ -18,9 +18,11 @@ class NumeroDetectado {
 
 // La separación por espacios es intencional: "10 20" son dos candidatos,
 // nunca una sola cantidad 1020.
-final _tokenNumerico = RegExp(
-  r'(?<![A-Za-z0-9])[-+]?\d+(?:[.,]\d+)*(?![A-Za-z0-9])',
-);
+final _tokenNumerico = RegExp(r'(?<![0-9.,])[-+]?\d+(?:[.,]\d+)*(?![0-9.,])');
+
+/// Formatea un monto confirmado con dos decimales y separador venezolano.
+String formatearMonto(double valor) =>
+    valor.toStringAsFixed(2).replaceAll('.', ',');
 
 /// Extrae apariciones monetarias válidas en orden de lectura.
 /// No elimina candidatos con el mismo valor: pueden estar en lugares distintos.

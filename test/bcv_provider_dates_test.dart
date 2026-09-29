@@ -92,9 +92,9 @@ void main() {
       return http.Response('{}', 404);
     });
 
-    final tasa = await BcvTodayService(client: client).obtenerTasaHistorica(
-      DateTime(2026, 9, 8),
-    );
+    final tasa = await BcvTodayService(
+      client: client,
+    ).obtenerTasaHistorica(DateTime(2026, 9, 8));
 
     expect(tasa?.usd, 100);
     expect(tasa?.eur, 200);

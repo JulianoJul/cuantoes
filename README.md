@@ -27,10 +27,11 @@ Si los tres proveedores fallan, se usa la última tasa válida guardada en
 
 El OCR conserva la geometría de ML Kit para seleccionar y copiar texto sobre la
 foto, y permite revisar monto, moneda y separadores antes de convertir. Los
-widgets del launcher son `RemoteViews` nativas: uno 4×2 USD/EUR y otro compacto
-2×2 configurable entre USD y EUR. WorkManager intenta refrescar cada hora cuando
-hay un widget instalado y conectividad; Android puede aplazarlo por ahorro de
-batería. La validación de cámara y widgets requiere un dispositivo/launcher real.
+widgets del launcher son `RemoteViews` nativas: el 4×2 es un conversor rápido
+con cuatro montos configurables, cambio USD/EUR y dirección; el compacto
+muestra la conversión de una unidad. WorkManager intenta refrescar las tasas
+cada hora cuando hay un widget instalado y conectividad; Android puede
+aplazarlo.
 
 ## Comandos
 
@@ -41,12 +42,9 @@ flutter run              # ejecutar en dispositivo/emulador
 flutter build apk --release --target-platform android-arm64 # release ARM64
 ```
 
-## Docs
+## Documentación
 
-Ver `docs/` para la documentación técnica:
-
-- `docs/doc.md` — arquitectura y flujo actual.
-- `docs/ai-context.md` — contexto activo y líneas rojas.
-- `docs/funciones.md` — catálogo de funciones.
-- `docs/decisiones.md` — decisiones de arquitectura.
-- `docs/google-stitch-prompt.txt` — prompt para rediseñar la UI/UX en Google Stitch.
+- [`docs/arquitectura.md`](docs/arquitectura.md) — fuente de verdad técnica,
+  flujos y catálogo de APIs compartidas.
+- [`docs/decisiones.md`](docs/decisiones.md) — historial de decisiones (ADR).
+- [`docs/validacion.md`](docs/validacion.md) — evidencia y pendientes en Android.

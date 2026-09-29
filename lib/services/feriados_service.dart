@@ -38,7 +38,9 @@ class FeriadosService {
           .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
-        final lines = const LineSplitter().convert(utf8.decode(response.bodyBytes));
+        final lines = const LineSplitter().convert(
+          utf8.decode(response.bodyBytes),
+        );
         final feriados = <String>{};
         bool inEvent = false;
 
@@ -58,8 +60,11 @@ class FeriadosService {
         if (feriados.isNotEmpty) {
           // Guardar en SharedPreferences
           await prefs.setStringList(_cacheKey, feriados.toList());
-          await prefs.setString(_lastSyncKey, DateTime.now().toUtc().toIso8601String());
-          
+          await prefs.setString(
+            _lastSyncKey,
+            DateTime.now().toUtc().toIso8601String(),
+          );
+
           // Actualizar variable en memoria
           setFeriadosGoogle(feriados);
         }

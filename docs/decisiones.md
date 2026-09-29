@@ -1,5 +1,12 @@
 # Architecture Decision Records (ADR)
 
+Los registros antiguos se conservan como historia y pueden estar supersedidos.
+La arquitectura vigente está resumida en [`arquitectura.md`](arquitectura.md).
+Decisiones activas principales: DEC-007 a DEC-009, DEC-012, DEC-013 y
+DEC-015 a DEC-020. DEC-001, DEC-005, DEC-006 y DEC-011 fueron sustituidas por
+la cascada JSON de DEC-015; DEC-010 conserva las preferencias, pero su patrón de
+navegación fue actualizado por DEC-019; DEC-014 fue sustituida por DEC-017.
+
 ## DEC-001: API principal + scraping fallback + cache
 
 - **Origen:** `[Instrucción Explícita del Usuario]`
@@ -126,6 +133,9 @@
 
 ## DEC-010: Menú lateral, Modo Oscuro y Coma Automática
 
+> **Estado:** preferencias vigentes; navegación por Drawer sustituida por
+> DEC-019.
+
 - **Origen:** `[Instrucción Explícita del Usuario]`
 - **Contexto y Causa:** Se requería un menú lateral (Drawer) para albergar opciones secundarias sin sobrecargar la UI principal. Específicamente, se pedía:
   1. Toggle de "Modo Coma Automática": un formateador de entrada que simule el desplazamiento de centavos (ej: al teclear `1` -> `0,01`, luego `5` -> `0,15`, luego `0` -> `1,50`).
@@ -135,7 +145,7 @@
   - Implementar `SettingsProvider` (ChangeNotifier) para gestionar y persistir las configuraciones en `SharedPreferences`.
   - Registrar `ChangeNotifierProvider<SettingsProvider>` a nivel global en `main.dart` envolviendo la app para permitir cambios de tema dinámicos con `themeMode`.
   - Crear `AutomaticCommaFormatter` (TextInputFormatter) para aplicar la lógica de desplazamiento de comas cuando el modo está activo.
-  - Diseñar el menú (`Drawer`) en `ConversorScreen` con los interruptores y el indicador de origen de datos en el footer.
+   - La ubicación de la pantalla de ajustes se define en DEC-019.
 - **Impacto:** La UI es más limpia y moderna. Los tests se adaptaron para inicializar `SettingsProvider` automáticamente dentro de `CuantoesApp`.
 
 ---
@@ -160,7 +170,7 @@
 - **Decisión:**
   - `ConversorViewmodel.fechaTasaSiguiente` expone la `fechaEfectiva` de la próxima tasa cacheada (`TasaRepository.obtenerTasaSiguiente()`), o `null` si no existe.
   - `ConversorViewmodel.fechaMaximaSeleccionable` devuelve esa fecha si es futura, o hoy en Venezuela en caso contrario.
-  - `_abrirCalendario` usa `fechaMaximaSeleccionable` como `lastDate` del DatePicker.
+  - `mostrarCalendarioTasa()` usa `fechaMaximaSeleccionable` como `lastDate` del DatePicker.
 - **Impacto:** No se pueden elegir fechas posteriores a la próxima tasa publicada; los fines de semana y feriados ya transcurridos siguen seleccionables.
 
 ---
@@ -231,7 +241,61 @@
 ## DEC-018: Widgets nativos Android y actualización de mejor esfuerzo
 
 - **Estado:** implementado; falta verificación en launcher/dispositivo real.
-- **Decisión:** usar `home_widget` únicamente como puente de preferencias/actualización y escribir el launcher UI con `AppWidgetProvider` + `RemoteViews` Kotlin/XML. El widget grande es 4×2 USD/EUR; el compacto es 2×2 y su divisa se configura globalmente desde la app.
+- **Decisión:** usar `home_widget` únicamente como puente de preferencias/actualización y escribir el launcher UI con `AppWidgetProvider` + `RemoteViews` Kotlin/XML. La interacción vigente del conversor se detalla en DEC-021.
 - **Snapshot:** versionado, separado del histórico, con valores BCV, fecha efectiva, fuente y estado de validación/offline. El clic abre Cuantoes.
 - **Fondo:** WorkManager solicita una actualización horaria solo cuando la app detecta un widget instalado. Android/Doze puede diferirla; no mostrarla como horario garantizado. Sin widgets instalados, se cancela el trabajo detectado al iniciar/reanudar la app.
 - **Pendiente:** pruebas en launcher real para alta/baja, reinicio, proceso eliminado, Doze, offline y dimensiones/resizing. La moneda compacta no se configura por instancia.
+
+---
+
+## DEC-019: Inicio centrado en conversión y teclado estable
+
+- **Estado:** implementado y verificado en widget test y Samsung SM-A156M.
+- **Contexto:** la marca ocupaba la cabecera, el escaneo aparecía dos veces, el
+  calendario quedaba escondido dentro de la hoja de tasas y el `adjustResize`
+  desplazaba/deformaba visualmente el panel al abrir Gboard.
+- **Decisión:** eliminar la cabecera y mostrar Calendario, Ajustes y Escanear
+  como botones tonales dentro del contenido; mantener un solo botón OCR. El panel usa etiquetas
+  explícitas (`USD ($)`, `EUR (€)`, `VES (Bs.)`) y «Monto en …». El `Scaffold`
+  no cambia de tamaño por el teclado, de modo que monto y resultado conservan
+  su geometría; el contenido secundario puede quedar cubierto temporalmente.
+- **Reutilización:** `mostrarCalendarioTasa()` sirve al inicio y a
+  `RatesSheet`; `currency_labels.dart` centraliza las etiquetas monetarias.
+
+---
+
+## DEC-020: Conservar registradores de ML Kit en release
+
+- **Estado:** implementado y verificado en APK release ARM64.
+- **Contexto:** con R8, los nombres de `ComponentRegistrar` sobrevivían pero sus
+  constructores vacíos no. Firebase `ComponentDiscovery` fallaba por reflexión
+  y ML Kit no llegaba a procesar la imagen; debug sí funcionaba.
+- **Decisión:** conservar los constructores públicos sin argumentos de todas
+  las implementaciones de `com.google.firebase.components.ComponentRegistrar`
+  mediante `-keepclassmembers`. No desactivar R8 ni incluir modelos de idiomas
+  no usados.
+- **Impacto:** el modelo Latin empaquetado funciona en release y la regla cubre
+  los registradores comunes, de visión y de reconocimiento de texto.
+
+---
+
+## DEC-021: Widget nativo como conversor rápido
+
+- **Estado:** implementado; pendiente validación visual final en launcher.
+- **Contexto:** el widget 4×2 mostraba dos tasas y metadatos, pero el uso
+  principal pedido es convertir un monto rápidamente. `RemoteViews` no admite
+  un campo de texto editable.
+- **Decisión:** convertir el 4×2 en un conversor con presets 1/10/50/100,
+  selector USD/EUR y cambio de dirección VES. Tocar el fondo abre la pantalla
+  principal y enfoca el campo para escribir cualquier otro monto. El compacto
+  muestra la conversión de una unidad.
+- **Datos:** `WidgetSnapshot` V3 añade las tasas numéricas sin redondear; V2 y
+  el formato legado siguen siendo legibles. La presentación siempre usa dos
+  decimales.
+- **Forma:** la tarjeta se dibuja dentro de un root transparente con margen,
+  `clipToOutline` y el radio recomendado por el sistema en Android 12+ para que
+  el launcher no oculte las esquinas.
+- **Configuración:** Ajustes permite reemplazar los cuatro presets por enteros
+  positivos distintos. Flutter los persiste para la pantalla y los publica en
+  `HomeWidgetPreferences`; el proveedor nativo valida el JSON antes de cambiar
+  textos y acciones de los cuatro botones.
