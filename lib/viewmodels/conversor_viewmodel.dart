@@ -28,6 +28,7 @@ class ConversorViewmodel extends ChangeNotifier {
   EstadoTasa _estado = EstadoTasa.cargando;
   bool _cargandoUsdt = false;
   String _error = '';
+  String _avisoActualizacion = '';
   String _errorUsdt = '';
   CotizacionUsdt? _cotizacionUsdt;
   ConversionDireccion _direccion = ConversionDireccion.monedaAVes;
@@ -46,6 +47,7 @@ class ConversorViewmodel extends ChangeNotifier {
   ResultadoTasa? get resultadoTasa => _resultadoTasa;
   EstadoTasa get estado => _estado;
   String get error => _error;
+  String get avisoActualizacion => _avisoActualizacion;
   String get errorUsdt => _errorUsdt;
   ConversionDireccion get direccion => _direccion;
   String get entrada => _entrada;
@@ -59,17 +61,25 @@ class ConversorViewmodel extends ChangeNotifier {
   DateTime? get fechaSeleccionada => _fechaSeleccionada;
   bool get esMonedaAVes => _direccion == ConversionDireccion.monedaAVes;
 
-  bool _tasaSiguienteDisponible = false;
-  bool get tasaSiguienteDisponible => _tasaSiguienteDisponible;
-
   DateTime? _fechaTasaSiguiente;
-  DateTime? get fechaTasaSiguiente => _fechaTasaSiguiente;
+  DateTime? get fechaTasaSiguiente {
+    final siguiente = _fechaTasaSiguiente;
+    if (siguiente == null || !_fechaDia(siguiente).isAfter(_hoyVenezuela())) {
+      return null;
+    }
+    return siguiente;
+  }
+
+  bool get tasaSiguienteDisponible => fechaTasaSiguiente != null;
+  bool get esFechaProximaSeleccionada =>
+      _fechaSeleccionada != null &&
+      fechaTasaSiguiente != null &&
+      _fechaDia(_fechaSeleccionada!) == _fechaDia(fechaTasaSiguiente!);
 
   /// Mayor fecha elegible: próxima tasa publicada o hoy en Venezuela.
   DateTime get fechaMaximaSeleccionable {
-    final ahora = ahoraVenezuela();
-    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
-    final siguiente = _fechaTasaSiguiente;
+    final hoy = _hoyVenezuela();
+    final siguiente = fechaTasaSiguiente;
     if (siguiente != null && siguiente.isAfter(hoy)) return siguiente;
     return hoy;
   }
@@ -92,8 +102,7 @@ class ConversorViewmodel extends ChangeNotifier {
 
     if (_tasa == null) _estado = EstadoTasa.cargando;
     _error = '';
-    _tasaSiguienteDisponible = false;
-    _fechaTasaSiguiente = null;
+    _avisoActualizacion = '';
     variacion = null;
     _notificar();
 
@@ -125,6 +134,11 @@ class ConversorViewmodel extends ChangeNotifier {
         _estado = _tasa == null ? EstadoTasa.error : EstadoTasa.listo;
         _limpiarResultado();
         _notificar();
+        if (fechaTasaSiguiente == null) {
+          unawaited(
+            _cargarFechaSiguiente(generacion, forzar: fechaSolicitada == null),
+          );
+        }
         return;
       }
 
@@ -132,8 +146,10 @@ class ConversorViewmodel extends ChangeNotifier {
       _estado = EstadoTasa.listo;
       _error = '';
       if (fechaSolicitada == null) _publicarTasaActual();
-      if (fechaSolicitada == null) {
-        _cargarFechaSiguiente(generacion, monedaGeneracion);
+      if (fechaSolicitada == null || fechaTasaSiguiente == null) {
+        unawaited(
+          _cargarFechaSiguiente(generacion, forzar: fechaSolicitada == null),
+        );
       }
       FeriadosService.sincronizar();
       if (_entrada.isNotEmpty) convertir(notificar: false);
@@ -152,23 +168,22 @@ class ConversorViewmodel extends ChangeNotifier {
       _estado = _tasa == null ? EstadoTasa.error : EstadoTasa.listo;
       variacion = null;
       _notificar();
+      if (fechaTasaSiguiente == null) {
+        unawaited(
+          _cargarFechaSiguiente(generacion, forzar: fechaSolicitada == null),
+        );
+      }
     }
   }
 
   Future<void> _cargarFechaSiguiente(
-    int generacion,
-    int monedaGeneracion,
-  ) async {
+    int generacion, {
+    bool forzar = false,
+  }) async {
     try {
-      final siguiente = await _repository.obtenerTasaSiguiente();
-      if (!_sigueVigente(
-        generacion: generacion,
-        monedaGeneracion: monedaGeneracion,
-      )) {
-        return;
-      }
+      final siguiente = await _repository.obtenerTasaSiguiente(forzar: forzar);
+      if (!_sigueVigente(generacion: generacion)) return;
       _fechaTasaSiguiente = siguiente?.fechaEfectiva;
-      _tasaSiguienteDisponible = siguiente != null;
       _notificar();
     } catch (_) {
       // La consulta opcional no debe esconder la tasa actual.
@@ -229,7 +244,7 @@ class ConversorViewmodel extends ChangeNotifier {
 
   Future<void> refrescarTasa() async {
     if (_fechaSeleccionada != null) {
-      await cargarTasa();
+      await _refrescarFechaSeleccionada();
       return;
     }
 
@@ -237,8 +252,7 @@ class ConversorViewmodel extends ChangeNotifier {
     final monedaGeneracion = _monedaGeneracion;
     if (_tasa == null) _estado = EstadoTasa.cargando;
     _error = '';
-    _tasaSiguienteDisponible = false;
-    _fechaTasaSiguiente = null;
+    _avisoActualizacion = '';
     variacion = null;
     _notificar();
 
@@ -261,7 +275,7 @@ class ConversorViewmodel extends ChangeNotifier {
       FeriadosService.sincronizar();
       if (_entrada.isNotEmpty) convertir(notificar: false);
       _notificar();
-      _cargarFechaSiguiente(generacion, monedaGeneracion);
+      unawaited(_cargarFechaSiguiente(generacion, forzar: true));
       await _calcularVariacion(generacion: generacion);
     } catch (error) {
       if (!_sigueVigente(
@@ -273,6 +287,69 @@ class ConversorViewmodel extends ChangeNotifier {
       _error = error.toString();
       _estado = _tasa == null ? EstadoTasa.error : EstadoTasa.listo;
       _notificar();
+      unawaited(_cargarFechaSiguiente(generacion, forzar: true));
+    }
+  }
+
+  Future<void> _refrescarFechaSeleccionada() async {
+    final fecha = _fechaSeleccionada!;
+    final generacion = ++_cargaGeneracion;
+    final monedaGeneracion = _monedaGeneracion;
+    _error = '';
+    _avisoActualizacion = '';
+    if (_tasa == null) _estado = EstadoTasa.cargando;
+    _notificar();
+
+    try {
+      final consulta = await _repository.refrescarTasaHistorica(fecha);
+      if (!_sigueVigente(
+        generacion: generacion,
+        monedaGeneracion: monedaGeneracion,
+      )) {
+        return;
+      }
+
+      final tasa = consulta.tasa;
+      if (tasa == null ||
+          !tasa.esValida ||
+          _fechaDia(tasa.fechaEfectiva).isAfter(fecha)) {
+        _tasa = null;
+        _estado = EstadoTasa.error;
+        _error = 'Sin datos para esta fecha';
+        _limpiarResultado();
+        _notificar();
+        if (fechaTasaSiguiente == null) {
+          unawaited(_cargarFechaSiguiente(generacion));
+        }
+        return;
+      }
+
+      _tasa = tasa;
+      _resultadoTasa = null;
+      _estado = EstadoTasa.listo;
+      _avisoActualizacion = consulta.desdeCache
+          ? 'No se verificó una tasa nueva · se conserva la tasa guardada'
+          : 'Tasa consultada por internet para esta fecha';
+      if (_entrada.isNotEmpty) convertir(notificar: false);
+      _notificar();
+      if (fechaTasaSiguiente == null) {
+        unawaited(_cargarFechaSiguiente(generacion));
+      }
+      await _calcularVariacion(generacion: generacion);
+    } catch (_) {
+      if (!_sigueVigente(
+        generacion: generacion,
+        monedaGeneracion: monedaGeneracion,
+      )) {
+        return;
+      }
+      _avisoActualizacion =
+          'No se pudo verificar · se conserva la tasa mostrada';
+      _estado = _tasa == null ? EstadoTasa.error : EstadoTasa.listo;
+      _notificar();
+      if (fechaTasaSiguiente == null) {
+        unawaited(_cargarFechaSiguiente(generacion));
+      }
     }
   }
 
@@ -340,11 +417,19 @@ class ConversorViewmodel extends ChangeNotifier {
 
   Future<void> seleccionarFecha(DateTime fecha) async {
     _fechaSeleccionada = DateTime(fecha.year, fecha.month, fecha.day);
+    _tasa = null;
+    _resultadoTasa = null;
+    _limpiarResultado();
+    _estado = EstadoTasa.cargando;
     await cargarTasa();
   }
 
   Future<void> volverAHoy() async {
     _fechaSeleccionada = null;
+    _tasa = null;
+    _resultadoTasa = null;
+    _limpiarResultado();
+    _estado = EstadoTasa.cargando;
     await cargarTasa();
   }
 
@@ -488,6 +573,11 @@ class ConversorViewmodel extends ChangeNotifier {
 
   DateTime _fechaDia(DateTime fecha) =>
       DateTime(fecha.year, fecha.month, fecha.day);
+
+  DateTime _hoyVenezuela() {
+    final ahora = ahoraVenezuela();
+    return _fechaDia(ahora);
+  }
 
   @override
   void dispose() {

@@ -299,3 +299,25 @@ navegación fue actualizado por DEC-019; DEC-014 fue sustituida por DEC-017.
   positivos distintos. Flutter los persiste para la pantalla y los publica en
   `HomeWidgetPreferences`; el proveedor nativo valida el JSON antes de cambiar
   textos y acciones de los cuatro botones.
+
+---
+
+## DEC-022: Próxima tasa independiente de la consulta actual
+
+- **Estado:** implementado, con 80 pruebas aprobadas y APK release instalada en
+  Samsung SM-A156M; quedan pendientes las comprobaciones manuales específicas
+  de fechas futuras.
+- **Contexto:** seleccionar la tasa futura borraba su fecha, cerraba el
+  calendario antes de ella y la llamaba «Histórico». El botón de actualizar
+  devolvía la entrada exacta de caché sin verificar cambios del proveedor.
+- **Decisión:** preservar la fecha próxima durante la selección; permitir en el
+  calendario solo fechas futuras publicadas; consultar la próxima tasa aun sin
+  tasa actual o si la tasa de hoy vino de la fuente principal. Para la fecha
+  seleccionada, «Actualizar» fuerza consulta a los proveedores y declara cuándo
+  se conserva la caché. No mostrar un cálculo anterior mientras se carga otra
+  fecha.
+- **Actualización:** comprobar la tasa actual al regresar a primer plano y
+  periódicamente mientras la pantalla permanece abierta. La tasa próxima
+  seleccionada se puede volver a verificar sin cambiar de fecha. No cambiar
+  automáticamente la selección histórica del usuario ni publicar sus valores
+  en los widgets oficiales.

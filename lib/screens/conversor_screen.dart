@@ -50,13 +50,17 @@ class _ConversorBody extends StatefulWidget {
 
 class _ConversorBodyState extends State<_ConversorBody>
     with WidgetsBindingObserver {
+  static const _foregroundRateCheckInterval = Duration(minutes: 30);
   final FocusNode _montoFocusNode = FocusNode();
   bool _lostDataCheckScheduled = false;
+  bool _comprobarAlReanudar = false;
+  Timer? _rateCheckTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _iniciarComprobacionTasas();
     _widgetActionChannel.setMethodCallHandler(_handleWidgetAction);
     WidgetsBinding.instance.addPostFrameCallback((_) => _consumeWidgetAction());
   }
@@ -89,17 +93,48 @@ class _ConversorBodyState extends State<_ConversorBody>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      _iniciarComprobacionTasas();
+      if (_comprobarAlReanudar) {
+        _comprobarAlReanudar = false;
+        _comprobarTasasVisibles();
+      }
       unawaited(
         WidgetBackgroundRefresh.actualizarProgramacion().catchError(
           (Object _) {},
         ),
       );
+    } else if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _comprobarAlReanudar = true;
+      if (state != AppLifecycleState.inactive) {
+        _rateCheckTimer?.cancel();
+        _rateCheckTimer = null;
+      }
     }
+  }
+
+  void _iniciarComprobacionTasas() {
+    _rateCheckTimer ??= Timer.periodic(
+      _foregroundRateCheckInterval,
+      (_) => _comprobarTasasVisibles(),
+    );
+  }
+
+  void _comprobarTasasVisibles() {
+    if (!mounted) return;
+    final vm = context.read<ConversorViewmodel>();
+    if (vm.moneda == 'USDT' ||
+        (vm.fechaSeleccionada != null && !vm.esFechaProximaSeleccionada)) {
+      return;
+    }
+    unawaited(vm.refrescarTasa());
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _rateCheckTimer?.cancel();
     _widgetActionChannel.setMethodCallHandler(null);
     _montoFocusNode.dispose();
     super.dispose();
@@ -587,10 +622,9 @@ class _ConversorBodyState extends State<_ConversorBody>
     final aplicada = vm.fechaEfectivaAplicada ?? vm.tasa?.fechaEfectiva;
     final solicitada = vm.fechaSeleccionada;
     if (solicitada != null) {
-      final esProxima =
-          vm.fechaTasaSiguiente != null &&
-          _mismaFecha(solicitada, vm.fechaTasaSiguiente!);
-      if (esProxima) return 'Próxima · ${formatoFecha.format(solicitada)}';
+      if (vm.esFechaProximaSeleccionada) {
+        return 'Próxima · ${formatoFecha.format(solicitada)}';
+      }
       return aplicada == null
           ? 'Histórico · solicitada ${formatoFecha.format(solicitada)}'
           : 'Histórico · ${formatoFecha.format(solicitada)} → ${formatoFecha.format(aplicada)}';
@@ -719,9 +753,4 @@ class _ConversorBodyState extends State<_ConversorBody>
       });
     }
   }
-
-  bool _mismaFecha(DateTime primera, DateTime segunda) =>
-      primera.year == segunda.year &&
-      primera.month == segunda.month &&
-      primera.day == segunda.day;
 }

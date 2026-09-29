@@ -7,6 +7,7 @@ import 'package:http/testing.dart';
 import 'package:cuantoes/services/bcv_api_service.dart';
 import 'package:cuantoes/services/bcv_today_service.dart';
 import 'package:cuantoes/services/chitty_bcv_service.dart';
+import 'package:cuantoes/utils/feriados_ve.dart';
 
 void main() {
   test('DolarAPI parses the official USD and EUR endpoints', () async {
@@ -119,4 +120,33 @@ void main() {
     expect(tasa.origen, 'chitty_bcv');
     expect(tasa.fechaEfectiva, DateTime(2026, 9, 25));
   });
+
+  test(
+    'Chitty obtiene la tasa adelantada sin consultar antes la actual',
+    () async {
+      final ahora = ahoraVenezuela();
+      final siguiente = proximoDiaHabil(
+        DateTime(ahora.year, ahora.month, ahora.day + 1),
+      );
+      final client = MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'adelantada': {
+              'usd': 120,
+              'eur': 130,
+              'aplica_desde': siguiente.toIso8601String(),
+            },
+          }),
+          200,
+        ),
+      );
+
+      final tasa = await ChittyBcvService(
+        client: client,
+      ).obtenerTasaSiguiente();
+
+      expect(tasa?.usd, 120);
+      expect(tasa?.fechaEfectiva, siguiente);
+    },
+  );
 }

@@ -216,6 +216,136 @@ void main() {
   });
 
   test(
+    'forced historical refresh replaces an exact cached next rate',
+    () async {
+      final hoy = _hoyVenezuela();
+      final siguiente = proximoDiaHabil(hoy.add(const Duration(days: 1)));
+      final cache = BcvCacheService();
+      await cache.guardarTasa(_tasa(siguiente, 110, 121));
+      final provider = _FakeProvider()..historical = _tasa(siguiente, 120, 132);
+      final repository = TasaRepository(providers: [provider], cache: cache);
+
+      final resultado = await repository.refrescarTasaHistorica(siguiente);
+
+      expect(provider.historicalCalls, 1);
+      expect(resultado.desdeCache, isFalse);
+      expect(resultado.tasa?.usd, 120);
+      expect((await cache.obtenerTasaPorFecha(siguiente))?.usd, 120);
+    },
+  );
+
+  test(
+    'forced historical refresh keeps an exact cache if sources fail',
+    () async {
+      final siguiente = proximoDiaHabil(
+        _hoyVenezuela().add(const Duration(days: 1)),
+      );
+      final cache = BcvCacheService();
+      await cache.guardarTasa(_tasa(siguiente, 110, 121));
+      final provider = _FakeProvider();
+      final repository = TasaRepository(providers: [provider], cache: cache);
+
+      final resultado = await repository.refrescarTasaHistorica(siguiente);
+
+      expect(provider.historicalCalls, 1);
+      expect(resultado.desdeCache, isTrue);
+      expect(resultado.tasa?.usd, 110);
+    },
+  );
+
+  test('a future selection never uses today as its effective rate', () async {
+    final hoy = _hoyVenezuela();
+    final siguiente = proximoDiaHabil(hoy.add(const Duration(days: 1)));
+    final cache = BcvCacheService();
+    await cache.guardarTasa(_tasa(hoy, 100, 110));
+    final provider = _FakeProvider()..historical = _tasa(hoy, 100, 110);
+    final repository = TasaRepository(providers: [provider], cache: cache);
+
+    expect(await repository.obtenerTasaHistorica(siguiente), isNull);
+    final refrescada = await repository.refrescarTasaHistorica(siguiente);
+    expect(refrescada.tasa, isNull);
+    expect(refrescada.desdeCache, isTrue);
+  });
+
+  test(
+    'a forced next-rate lookup replaces the cached rate for its day',
+    () async {
+      final hoy = _hoyVenezuela();
+      final siguiente = proximoDiaHabil(hoy.add(const Duration(days: 1)));
+      final cache = BcvCacheService();
+      await cache.guardarTasa(_tasa(siguiente, 110, 121));
+      final provider = _FakeProvider()..next = _tasa(siguiente, 120, 132);
+      final repository = TasaRepository(providers: [provider], cache: cache);
+
+      final refrescada = await repository.obtenerTasaSiguiente(forzar: true);
+
+      expect(provider.nextCalls, 1);
+      expect(refrescada?.usd, 120);
+      expect((await cache.obtenerTasaPorFecha(siguiente))?.usd, 120);
+    },
+  );
+
+  test(
+    'forced future refresh can use a next rate from a secondary source',
+    () async {
+      final siguiente = proximoDiaHabil(
+        _hoyVenezuela().add(const Duration(days: 1)),
+      );
+      final primario = _FakeProvider();
+      final secundario = _FakeProvider()..next = _tasa(siguiente, 120, 132);
+      final repository = TasaRepository(providers: [primario, secundario]);
+
+      final refrescada = await repository.refrescarTasaHistorica(siguiente);
+
+      expect(secundario.nextCalls, 1);
+      expect(refrescada.desdeCache, isFalse);
+      expect(refrescada.tasa?.usd, 120);
+    },
+  );
+
+  test(
+    'discovers next rate on a secondary provider without a current fetch',
+    () async {
+      final hoy = _hoyVenezuela();
+      final siguiente = proximoDiaHabil(hoy.add(const Duration(days: 1)));
+      final primario = _FakeProvider()..realtime = _tasa(hoy, 100, 110);
+      final secundario = _FakeProvider()..next = _tasa(siguiente, 120, 132);
+      final repository = TasaRepository(providers: [primario, secundario]);
+
+      await repository.refrescarTasa();
+      final proxima = await repository.obtenerTasaSiguiente();
+
+      expect(secundario.realtimeCalls, 0);
+      expect(secundario.nextCalls, 1);
+      expect(proxima?.usd, 120);
+    },
+  );
+
+  test(
+    'a closer secondary next date beats a later cached primary date',
+    () async {
+      final hoy = _hoyVenezuela();
+      final cercana = proximoDiaHabil(hoy.add(const Duration(days: 1)));
+      final lejana = proximoDiaHabil(cercana.add(const Duration(days: 1)));
+      final cache = BcvCacheService();
+      await cache.guardarTasa(_tasa(lejana, 130, 143));
+      final primario = _FakeProvider()..next = _tasa(lejana, 131, 144);
+      final secundario = _FakeProvider()..next = _tasa(cercana, 120, 132);
+      final repository = TasaRepository(
+        providers: [primario, secundario],
+        cache: cache,
+      );
+
+      final proxima = await repository.obtenerTasaSiguiente(forzar: true);
+
+      expect(primario.nextCalls, 1);
+      expect(secundario.nextCalls, 1);
+      expect(proxima?.fechaEfectiva, cercana);
+      expect((await cache.obtenerTasaPorFecha(cercana))?.usd, 120);
+    },
+  );
+
+  test(
     'DolarAPI history chooses USD and EUR from one effective date',
     () async {
       final client = MockClient((request) async {
@@ -305,8 +435,12 @@ class _FakeApi extends BcvApiService {
 
 class _FakeProvider implements BcvProvider {
   TasaBcv? realtime;
+  TasaBcv? historical;
+  TasaBcv? next;
   Object? realtimeError;
   int realtimeCalls = 0;
+  int historicalCalls = 0;
+  int nextCalls = 0;
 
   @override
   String get nombre => 'test';
@@ -319,13 +453,19 @@ class _FakeProvider implements BcvProvider {
   }
 
   @override
-  Future<TasaBcv?> obtenerTasaHistorica(DateTime fecha) async => null;
+  Future<TasaBcv?> obtenerTasaHistorica(DateTime fecha) async {
+    historicalCalls++;
+    return historical;
+  }
 
   @override
   Future<TasaBcv?> obtenerTasaAnterior(DateTime fechaLimite) async => null;
 
   @override
-  Future<TasaBcv?> obtenerTasaSiguiente() async => null;
+  Future<TasaBcv?> obtenerTasaSiguiente() async {
+    nextCalls++;
+    return next;
+  }
 
   @override
   Future<double?> obtenerUsdt() async => null;

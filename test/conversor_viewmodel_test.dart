@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -18,6 +20,9 @@ class _FakeTasaRepository extends TasaRepository {
   int obtenerTasaCalls = 0;
   int refrescarTasaCalls = 0;
   int obtenerTasaHistoricaCalls = 0;
+  int refrescarTasaHistoricaCalls = 0;
+  Future<TasaBcv?>? siguientePendiente;
+  Future<TasaBcv?>? historicaPendiente;
   final limitesAnteriores = <DateTime>[];
 
   @override
@@ -35,7 +40,16 @@ class _FakeTasaRepository extends TasaRepository {
   @override
   Future<TasaBcv?> obtenerTasaHistorica(DateTime fecha) async {
     obtenerTasaHistoricaCalls++;
-    return historica;
+    final pendiente = historicaPendiente;
+    return pendiente != null ? await pendiente : historica;
+  }
+
+  @override
+  Future<({TasaBcv? tasa, bool desdeCache})> refrescarTasaHistorica(
+    DateTime fecha,
+  ) async {
+    refrescarTasaHistoricaCalls++;
+    return (tasa: historica, desdeCache: historica == null);
   }
 
   @override
@@ -45,7 +59,10 @@ class _FakeTasaRepository extends TasaRepository {
   }
 
   @override
-  Future<TasaBcv?> obtenerTasaSiguiente() async => siguiente;
+  Future<TasaBcv?> obtenerTasaSiguiente({bool forzar = false}) async {
+    final pendiente = siguientePendiente;
+    return pendiente != null ? await pendiente : siguiente;
+  }
 
   @override
   Future<CotizacionUsdt?> obtenerCotizacionUsdt({bool forzar = false}) async {
@@ -133,7 +150,7 @@ void main() {
   });
 
   test(
-    'refreshes the selected historical date instead of loading live data',
+    'refreshes a selected date through the forced historical request',
     () async {
       final repository = _FakeTasaRepository()
         ..historica = _tasa(usd: 100, eur: 200, efectiva: DateTime(2026, 9, 4));
@@ -144,7 +161,8 @@ void main() {
       await vm.refrescarTasa();
 
       expect(repository.refrescarTasaCalls, 0);
-      expect(repository.obtenerTasaHistoricaCalls, 2);
+      expect(repository.obtenerTasaHistoricaCalls, 1);
+      expect(repository.refrescarTasaHistoricaCalls, 1);
       expect(vm.fechaSeleccionada, DateTime(2026, 9, 6));
     },
   );
@@ -178,6 +196,90 @@ void main() {
     expect(vm.tasaSiguienteDisponible, isTrue);
     expect(vm.fechaMaximaSeleccionable, manana);
   });
+
+  test(
+    'seleccionar la próxima tasa conserva el límite del calendario',
+    () async {
+      final hoy = _hoyVenezuela();
+      final siguiente = proximoDiaHabil(hoy.add(const Duration(days: 1)));
+      final repository = _FakeTasaRepository()
+        ..actual = _tasa(usd: 100, eur: 110, efectiva: hoy)
+        ..historica = _tasa(usd: 120, eur: 130, efectiva: siguiente)
+        ..siguiente = _tasa(usd: 120, eur: 130, efectiva: siguiente);
+      final vm = ConversorViewmodel(repository: repository);
+      addTearDown(vm.dispose);
+
+      await vm.cargarTasa();
+      expect(vm.fechaMaximaSeleccionable, siguiente);
+      await vm.seleccionarFecha(siguiente);
+
+      expect(vm.tasa?.usd, 120);
+      expect(vm.esFechaProximaSeleccionada, isTrue);
+      expect(vm.fechaTasaSiguiente, siguiente);
+      expect(vm.fechaMaximaSeleccionable, siguiente);
+    },
+  );
+
+  test('descubre la próxima tasa incluso si falta la actual', () async {
+    final siguiente = proximoDiaHabil(
+      _hoyVenezuela().add(const Duration(days: 1)),
+    );
+    final repository = _FakeTasaRepository()
+      ..siguiente = _tasa(usd: 120, eur: 130, efectiva: siguiente);
+    final vm = ConversorViewmodel(repository: repository);
+    addTearDown(vm.dispose);
+
+    await vm.cargarTasa();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(vm.estado, EstadoTasa.error);
+    expect(vm.fechaTasaSiguiente, siguiente);
+    expect(vm.fechaMaximaSeleccionable, siguiente);
+  });
+
+  test('el cambio de divisa no descarta la búsqueda de próxima tasa', () async {
+    final hoy = _hoyVenezuela();
+    final siguiente = proximoDiaHabil(hoy.add(const Duration(days: 1)));
+    final pendiente = Completer<TasaBcv?>();
+    final repository = _FakeTasaRepository()
+      ..actual = _tasa(usd: 100, eur: 110, efectiva: hoy)
+      ..siguientePendiente = pendiente.future;
+    final vm = ConversorViewmodel(repository: repository);
+    addTearDown(vm.dispose);
+
+    await vm.cargarTasa();
+    await vm.setMoneda('EUR');
+    pendiente.complete(_tasa(usd: 120, eur: 130, efectiva: siguiente));
+    await Future<void>.delayed(Duration.zero);
+
+    expect(vm.fechaTasaSiguiente, siguiente);
+  });
+
+  test(
+    'no calcula con la tasa previa mientras carga una fecha elegida',
+    () async {
+      final hoy = _hoyVenezuela();
+      final siguiente = proximoDiaHabil(hoy.add(const Duration(days: 1)));
+      final pendiente = Completer<TasaBcv?>();
+      final repository = _FakeTasaRepository()
+        ..actual = _tasa(usd: 100, eur: 110, efectiva: hoy)
+        ..historicaPendiente = pendiente.future;
+      final vm = ConversorViewmodel(repository: repository);
+      addTearDown(vm.dispose);
+
+      await vm.cargarTasa();
+      vm.setEntrada('2');
+      expect(vm.resultado, '200.00');
+      final seleccion = vm.seleccionarFecha(siguiente);
+      expect(vm.estado, EstadoTasa.cargando);
+      expect(vm.tasa, isNull);
+      expect(vm.resultado, isEmpty);
+
+      pendiente.complete(_tasa(usd: 120, eur: 130, efectiva: siguiente));
+      await seleccion;
+      expect(vm.resultado, '240.00');
+    },
+  );
 
   test(
     'USDT no contamina tasas BCV y calcula con cotización separada',

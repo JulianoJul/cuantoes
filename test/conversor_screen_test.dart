@@ -31,7 +31,27 @@ class _ScreenRepository extends TasaRepository {
   Future<TasaBcv?> obtenerTasaAnterior(DateTime fechaLimite) async => null;
 
   @override
-  Future<TasaBcv?> obtenerTasaSiguiente() async => null;
+  Future<TasaBcv?> obtenerTasaSiguiente({bool forzar = false}) async => null;
+}
+
+class _NextScreenRepository extends _ScreenRepository {
+  final TasaBcv siguiente;
+
+  _NextScreenRepository(this.siguiente);
+
+  @override
+  Future<TasaBcv?> obtenerTasaSiguiente({bool forzar = false}) async =>
+      siguiente;
+
+  @override
+  Future<TasaBcv?> obtenerTasaHistorica(DateTime fecha) async {
+    if (fecha.year == siguiente.fechaEfectiva.year &&
+        fecha.month == siguiente.fechaEfectiva.month &&
+        fecha.day == siguiente.fechaEfectiva.day) {
+      return siguiente;
+    }
+    return super.obtenerTasaHistorica(fecha);
+  }
 }
 
 void main() {
@@ -95,6 +115,46 @@ void main() {
     expect(find.text('Preferencias'), findsOneWidget);
     expect(find.text('Conversor compacto (widget)'), findsOneWidget);
     expect(find.text('Valores predefinidos'), findsOneWidget);
+  });
+
+  testWidgets('la hoja conserva la fecha próxima después de seleccionarla', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 1920);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final ahora = ahoraVenezuela();
+    final siguiente = proximoDiaHabil(
+      DateTime(ahora.year, ahora.month, ahora.day + 1),
+    );
+    final repository = _NextScreenRepository(
+      TasaBcv(
+        usd: 120,
+        eur: 130,
+        usdt: 0,
+        fecha: siguiente,
+        fechaEfectiva: siguiente,
+        origen: 'test',
+      ),
+    );
+    await tester.pumpWidget(CuantoesApp(repository: repository));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('1 USD = Bs.').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Próxima tasa publicada'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Próxima tasa BCV'), findsOneWidget);
+    expect(find.textContaining('Próxima publicada'), findsOneWidget);
+    await tester.tap(find.byTooltip('Elegir fecha histórica'));
+    await tester.pumpAndSettle();
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+    expect(
+      tester.widget<DatePickerDialog>(find.byType(DatePickerDialog)).lastDate,
+      siguiente,
+    );
   });
 
   testWidgets('intercambio tiene una fila propia y cambia la dirección', (

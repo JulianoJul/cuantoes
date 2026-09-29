@@ -97,6 +97,7 @@ class RatesSheet extends StatelessWidget {
     final solicitada = vm.fechaSeleccionada;
     final aplicada = vm.fechaEfectivaAplicada ?? tasa?.fechaEfectiva;
     final resultado = vm.resultadoTasa;
+    final esProxima = vm.esFechaProximaSeleccionada;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -135,8 +136,8 @@ class RatesSheet extends StatelessWidget {
                   Expanded(
                     child: Text(
                       aplicada == null
-                          ? 'Solicitada ${formatoFecha.format(solicitada)} · sin tasa aplicada'
-                          : 'Solicitada ${formatoFecha.format(solicitada)}\nAplicada ${formatoFecha.format(aplicada)}',
+                          ? '${esProxima ? 'Próxima publicada' : 'Solicitada'} ${formatoFecha.format(solicitada)} · sin tasa aplicada'
+                          : '${esProxima ? 'Próxima publicada' : 'Solicitada'} ${formatoFecha.format(solicitada)}\nAplicada ${formatoFecha.format(aplicada)}',
                     ),
                   ),
                   TextButton(
@@ -182,7 +183,7 @@ class RatesSheet extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Tasa oficial BCV',
+                    esProxima ? 'Próxima tasa BCV' : 'Tasa oficial BCV',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 12),
@@ -210,6 +211,10 @@ class RatesSheet extends StatelessWidget {
                           ),
                         ),
                       ),
+                  ],
+                  if (vm.avisoActualizacion.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(vm.avisoActualizacion),
                   ],
                 ],
               ),

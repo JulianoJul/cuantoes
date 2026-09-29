@@ -20,7 +20,6 @@ class ChittyBcvService implements BcvProvider {
   static const _venezuelaOffset = Duration(hours: 4);
 
   final http.Client _client;
-  TasaBcv? _siguiente;
 
   ChittyBcvService({http.Client? client}) : _client = client ?? http.Client();
 
@@ -52,8 +51,6 @@ class ChittyBcvService implements BcvProvider {
       throw FormatException('$nombre no devolvió fechas válidas');
     }
 
-    _siguiente = _leerTasaAdelantada(map);
-
     return TasaBcv(
       usd: usd,
       eur: eur,
@@ -66,7 +63,8 @@ class ChittyBcvService implements BcvProvider {
   }
 
   @override
-  Future<TasaBcv?> obtenerTasaSiguiente() async => _siguiente;
+  Future<TasaBcv?> obtenerTasaSiguiente() async =>
+      _leerTasaAdelantada(await _obtenerMapa(Uri.parse(_latestUrl)));
 
   @override
   Future<TasaBcv?> obtenerTasaHistorica(DateTime fecha) async => null;

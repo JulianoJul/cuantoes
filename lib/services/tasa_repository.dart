@@ -220,8 +220,17 @@ class TasaRepository {
 
   Future<TasaBcv?> obtenerTasaHistorica(DateTime fecha) async {
     final limite = _dia(fecha);
+    final esFutura = limite.isAfter(_dia(ahoraVenezuela()));
     final cacheExacta = await _cache.obtenerTasaPorFecha(limite);
     if (cacheExacta != null) return cacheExacta;
+
+    if (esFutura) {
+      // Una fecha futura solo es consultable si ya se publicó su propia tasa.
+      final siguiente = await obtenerTasaSiguiente();
+      return siguiente != null && _dia(siguiente.fechaEfectiva) == limite
+          ? siguiente
+          : null;
+    }
 
     TasaBcv? mejor;
     for (final provider in _providers) {
@@ -238,6 +247,68 @@ class TasaRepository {
 
     final cachePrevia = await _cache.obtenerTasaMasRecienteHasta(limite);
     return _mayorFecha(mejor, cachePrevia, limite);
+  }
+
+  /// Consulta los proveedores incluso si existe una tasa exacta guardada.
+  /// Una tasa futura solo puede reemplazarse por datos de esa misma fecha;
+  /// nunca se presenta una tasa de hoy como una actualización de mañana.
+  Future<({TasaBcv? tasa, bool desdeCache})> refrescarTasaHistorica(
+    DateTime fecha,
+  ) async {
+    final limite = _dia(fecha);
+    final hoy = _dia(ahoraVenezuela());
+    final esFutura = limite.isAfter(hoy);
+    final cachePrevia = esFutura
+        ? await _cache.obtenerTasaPorFecha(limite)
+        : await _cache.obtenerTasaMasRecienteHasta(limite);
+    TasaBcv? mejorRed;
+
+    for (final provider in _providers) {
+      try {
+        final historica = await provider.obtenerTasaHistorica(limite);
+        mejorRed = _mayorFecha(mejorRed, historica, limite);
+      } catch (_) {
+        // Probar la próxima fuente sin descartar la tasa guardada.
+      }
+
+      if (esFutura && _dia(mejorRed?.fechaEfectiva ?? hoy).isBefore(limite)) {
+        try {
+          final siguiente = await provider.obtenerTasaSiguiente();
+          if (siguiente != null &&
+              siguiente.esValida &&
+              _dia(siguiente.fechaEfectiva).isAtSameMomentAs(limite)) {
+            mejorRed = siguiente;
+          }
+        } catch (_) {}
+        if (_dia(mejorRed?.fechaEfectiva ?? hoy).isBefore(limite)) {
+          try {
+            final actual = await provider.obtenerTasa();
+            if (actual.esValida &&
+                _dia(actual.fechaEfectiva).isAtSameMomentAs(limite)) {
+              mejorRed = actual;
+            }
+          } catch (_) {}
+        }
+      }
+
+      if (mejorRed != null &&
+          _dia(mejorRed.fechaEfectiva).isAtSameMomentAs(limite)) {
+        break;
+      }
+    }
+
+    if (esFutura &&
+        (mejorRed == null || _dia(mejorRed.fechaEfectiva) != limite)) {
+      mejorRed = null;
+    }
+    final usarRed =
+        mejorRed != null &&
+        (cachePrevia == null ||
+            !_dia(
+              mejorRed.fechaEfectiva,
+            ).isBefore(_dia(cachePrevia.fechaEfectiva)));
+    if (usarRed) await _guardarSinBloquear(mejorRed);
+    return (tasa: usarRed ? mejorRed : cachePrevia, desdeCache: !usarRed);
   }
 
   Future<TasaBcv?> obtenerTasaAnterior(DateTime fechaLimite) async {
@@ -313,12 +384,14 @@ class TasaRepository {
 
   Future<double?> obtenerUsdt() async => (await obtenerCotizacionUsdt())?.valor;
 
-  Future<TasaBcv?> obtenerTasaSiguiente() async {
+  Future<TasaBcv?> obtenerTasaSiguiente({bool forzar = false}) async {
     final ahora = ahoraVenezuela();
     final hoy = _dia(ahora);
     final siguienteCache = await _cache.obtenerTasaSiguiente(hoy);
-    if (siguienteCache != null) return siguienteCache;
+    if (siguienteCache != null && !forzar) return siguienteCache;
 
+    TasaBcv? elegida = siguienteCache;
+    var elegidaDeRed = false;
     for (final provider in _providers) {
       try {
         final siguiente = await provider.obtenerTasaSiguiente();
@@ -327,11 +400,21 @@ class TasaRepository {
             !_dia(siguiente.fechaEfectiva).isAfter(hoy)) {
           continue;
         }
-        await _guardarSinBloquear(siguiente);
-        return siguiente;
+        if (elegida == null ||
+            _dia(
+              siguiente.fechaEfectiva,
+            ).isBefore(_dia(elegida.fechaEfectiva)) ||
+            (_dia(siguiente.fechaEfectiva) == _dia(elegida.fechaEfectiva) &&
+                !elegidaDeRed)) {
+          elegida = siguiente;
+          elegidaDeRed = true;
+        }
+        // Buscar la fecha más cercana en todas las fuentes; la primera fuente
+        // conserva prioridad si dos tasas de red corresponden al mismo día.
       } catch (_) {}
     }
-    return null;
+    if (elegidaDeRed) await _guardarSinBloquear(elegida!);
+    return elegida;
   }
 
   Future<bool> existeTasaSiguiente() async =>

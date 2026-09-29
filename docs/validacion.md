@@ -1,29 +1,29 @@
 # Estado de validación
 
-Actualizado: 28 de septiembre de 2026.
+Actualizado: 29 de septiembre de 2026.
 
 ## Verificado
 
+- `dart format --output=none --set-exit-if-changed lib test`: 41 archivos
+  revisados, sin cambios pendientes de formato.
 - `flutter analyze`: sin incidencias.
-- Suite completa `flutter test`: 66 pruebas aprobadas.
+- Suite completa `flutter test`: 80 pruebas aprobadas.
 - Inicio con viewport 360×640 e inset de teclado de 280 dp: el panel conserva
   su tamaño y no produce overflow.
 - Samsung SM-A156M, Android 16/API 36, One UI Launcher:
   - UI principal en modo oscuro.
   - Gboard abierto sin desplazar ni deformar selector, monto o resultado.
   - Galería → PNG real → ML Kit → regiones seleccionables.
-- APK release final:
+- APK release ARM64 (flujo de tasa próxima):
   - ABI nativa única `arm64-v8a`.
-  - manifiesto `debuggable=false`.
-  - SHA-256: `8ac6ecfd9bffd759174e8abfba1a717f18f17d42bc9a2e955433c907990fd6b9`.
-  - Esos mismos bytes se instalaron en el Samsung: el contenido queda centrado,
-    el selector BCV/P2P conserva más ancho que VES y existe separación visible
-    entre «Intercambiar» y «Monto».
-  - Gboard abierto: tocar el área vacía cambió `mInputShown=true` a `false`.
-  - El botón que abría «Calendario» muestra `28/09/2026`, la fecha efectiva
-    vigente; tras elegir un histórico refleja la fecha seleccionada.
-  - Ajustes publicó `1/3/5/15`; el launcher actualizó los cuatro botones y tocar
-    `15` mostró `15,00 USD → 12.855,09 Bs.` sin abrir la app.
+  - APK compilada: `build/app/outputs/flutter-apk/app-release.apk` (34,1 MB).
+  - SHA-256: `a3c8e8d19efa553eaf1da60947002921953a6e7a6fe679a2fac687f0560752e8`.
+  - Instalada y abierta en Samsung SM-A156M, Android 16/API 36.
+  - El build todavía imprime el aviso KGP para `home_widget` y
+    `workmanager_android`: sus scripts incluyen aplicación condicional de KGP,
+    detectada estáticamente por Flutter aunque `android.builtInKotlin=true` y
+    el build release concluya correctamente. Los avisos de `System::load` vienen
+    de Gradle/JVM, no del código de la app.
 
 ## Incidente OCR release resuelto
 
@@ -52,6 +52,14 @@ contrato de interfaz. No se desactivó R8 ni se añadieron modelos innecesarios.
 
 ## Pendientes reales
 
+### Tasa próxima y calendario
+
+- Probar manualmente en el teléfono la próxima tasa publicada, seleccionarla,
+  reabrir el calendario y forzar actualización con y sin red. Los casos de
+  proveedor secundario, falta de tasa actual, refresco y límites de fecha tienen
+  pruebas automatizadas.
+- Verificar en ejecución prolongada el refresco al reanudar y cada 30 minutos.
+
 ### UI y accesibilidad
 
 - Probar modo claro manualmente.
@@ -76,8 +84,10 @@ contrato de interfaz. No se desactivó R8 ni se añadieron modelos innecesarios.
 
 - Release todavía usa la firma debug. Configurar una clave de producción antes
   de publicar.
-- `home_widget` y `workmanager_android` aún aplican el plugin Kotlin clásico;
-  Flutter avisa que versiones futuras exigirán su migración.
+- Flutter mantiene un aviso estático de KGP para `home_widget` y
+  `workmanager_android`, incluso en este build con Kotlin integrado activo.
+  Desaparecerá cuando sus scripts upstream dejen de declarar la aplicación
+  condicional del plugin KGP.
 
 ## Criterio para cerrar una prueba nativa
 

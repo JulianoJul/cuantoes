@@ -1,6 +1,6 @@
 # Arquitectura activa de Cuantoes
 
-Actualizado: 28 de septiembre de 2026.
+Actualizado: 29 de septiembre de 2026.
 
 Este documento es la fuente de verdad técnica del proyecto. Las razones de las
 decisiones están en [`decisiones.md`](decisiones.md) y las comprobaciones
@@ -51,7 +51,18 @@ ConversorViewmodel
 - Una tasa futura se guarda como próxima, pero nunca se devuelve como actual.
 - El histórico elige la mayor `fechaEfectiva ≤ fecha solicitada` entre proveedor
   y caché. Se pueden solicitar fines de semana y feriados.
-- El calendario llega hasta hoy o hasta la próxima tasa ya publicada.
+- `refrescarTasaHistorica()` consulta la red incluso cuando existe una entrada
+  exacta en caché; si no se valida un valor nuevo, conserva la tasa guardada y
+  devuelve el origen de esa decisión para la UI.
+- La búsqueda de la próxima tasa es independiente de la tasa actual: Chitty
+  consulta su valor adelantado aun cuando DolarAPI resolvió la tasa de hoy.
+- `obtenerTasaSiguiente(forzar: true)` vuelve a consultar proveedores aunque
+  exista una próxima tasa guardada; si fallan, conserva la fecha cacheada.
+- Para fechas futuras, una tasa aplicable debe coincidir exactamente con el
+  día solicitado; no se extrapola la tasa vigente de hoy hacia mañana.
+- El calendario permite cualquier día hasta hoy y, hacia adelante, solo la
+  fecha de la próxima tasa ya publicada. La selección futura conserva esta
+  fecha como límite al volver a abrir el calendario.
 - USDT se obtiene y persiste como `CotizacionUsdt`, con TTL y errores propios.
 
 ## Mapa del código
@@ -95,6 +106,7 @@ android/app/src/main/
 | `ChittyBcvService` | segundo fallback y fuente P2P de USDT |
 | `BcvCacheService` | tasas por fecha, próxima tasa, USDT y metadatos |
 | `TasaRepository` | selección de proveedor, caché, histórico y frescura |
+| `TasaRepository.refrescarTasaHistorica()` | consulta forzada de la fecha elegida y respaldo explícito de caché |
 | `OcrService.reconocerDocumento()` | archivo → ML Kit → documento con regiones |
 | `HomeWidgetService.publicar()` | resultado actual → snapshot → widgets |
 | `WidgetBackgroundRefresh` | programa/cancela WorkManager según instancias |
@@ -109,7 +121,7 @@ android/app/src/main/
 - `aplicarMontoEscaneado()` para sincronizar monto, moneda, dirección,
   controlador de texto y estado de coma automática.
 - `fechaEfectivaAplicada`, `fechaTasaSiguiente` y
-  `fechaMaximaSeleccionable`.
+  `fechaMaximaSeleccionable`; la próxima fecha no se borra al elegirla.
 - `labelOrigen` y `labelDestino`, basados en
   `utils/currency_labels.dart`.
 
@@ -125,6 +137,7 @@ android/app/src/main/
 | `AutomaticCommaFormatter` | desplazamiento opcional de decimales |
 | `etiquetaMoneda()` / `etiquetaSelectorMoneda()` | etiquetas USD ($), EUR (€), VES (Bs.) y contexto |
 | `mostrarCalendarioTasa()` | selector de fecha reutilizado por inicio y hoja de tasas |
+| `esFechaDisponibleTasa()` | permite fechas pasadas y solo el día futuro publicado |
 
 ## UI actual
 
@@ -145,6 +158,12 @@ android/app/src/main/
   o tocar un espacio vacío retira el foco y cierra el teclado.
 - La tarjeta de tasa abre `RatesSheet`, que conserva fuente, fechas, estado de
   caché, actualización y variación.
+- Al cambiar de fecha se oculta el cálculo anterior hasta cargar la tasa
+  aplicable. La hoja distingue «Próxima publicada» de «Solicitada» y señala si
+  un refresco histórico usó internet o conservó la tasa guardada.
+- En primer plano se comprueba la tasa actual al regresar a la app y cada 30
+  minutos. Una selección histórica no se reemplaza automáticamente; el widget
+  conserva su actualización independiente de mejor esfuerzo.
 
 ## OCR
 
