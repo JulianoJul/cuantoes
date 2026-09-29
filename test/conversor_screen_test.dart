@@ -48,7 +48,7 @@ void main() {
 
     await tester.pumpWidget(CuantoesApp(repository: _ScreenRepository()));
     await tester.pump();
-    await tester.tap(find.text('Calendario'));
+    await tester.tap(find.byKey(const Key('selected-rate-date-button')));
     await tester.pumpAndSettle();
 
     final ahora = ahoraVenezuela();
@@ -72,7 +72,13 @@ void main() {
 
     final fecha =
         '${sabado.day.toString().padLeft(2, '0')}/${sabado.month.toString().padLeft(2, '0')}/${sabado.year}';
-    expect(find.textContaining(fecha), findsOneWidget);
+    expect(find.text(fecha), findsOneWidget);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('selected-rate-date-label')))
+          .data,
+      fecha,
+    );
   });
 
   testWidgets('Ajustes abre desde su botón secundario', (tester) async {
@@ -194,7 +200,7 @@ void main() {
     expect(find.byType(TextField), findsOneWidget);
     expect(find.text('Conversor'), findsNothing);
     expect(tester.getSize(panel), sizeSinTeclado);
-    expect(find.text('Calendario'), findsOneWidget);
+    expect(find.byKey(const Key('selected-rate-date-button')), findsOneWidget);
     expect(find.text('Ajustes'), findsOneWidget);
     expect(find.byIcon(Icons.document_scanner_outlined), findsOneWidget);
     expect(find.text('Monto en USD (\$)'), findsOneWidget);

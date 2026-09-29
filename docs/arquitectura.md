@@ -133,7 +133,8 @@ android/app/src/main/
   desplazamiento en alturas pequeñas. El cambio de dirección ocupa una fila
   propia debajo de las dos monedas; la divisa BCV/P2P recibe más ancho que VES.
 - No hay cabecera: Calendario, Ajustes y Escanear son botones tonales dentro del
-  contenido.
+  contenido. El botón de fecha muestra la fecha seleccionada, o la fecha
+  efectiva vigente cuando no se ha elegido un histórico.
 - Existe un solo acceso visible al escaneo OCR.
 - Las monedas se muestran de forma explícita: `USD ($)`, `EUR (€)` y
   `VES (Bs.)`; el campo indica la moneda de entrada.

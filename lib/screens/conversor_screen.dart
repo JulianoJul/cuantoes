@@ -13,6 +13,7 @@ import '../services/tasa_repository.dart';
 import '../services/widget_background_refresh.dart';
 import '../utils/automatic_comma_formatter.dart';
 import '../utils/currency_labels.dart';
+import '../utils/feriados_ve.dart';
 import '../viewmodels/conversor_viewmodel.dart';
 import 'camera_capture_screen.dart';
 import 'ocr_selection_screen.dart';
@@ -413,33 +414,48 @@ class _ConversorBodyState extends State<_ConversorBody>
   Widget _buildSecondaryActions(
     ConversorViewmodel vm,
     SettingsProvider settings,
-  ) => Row(
-    children: [
-      Expanded(
-        child: SizedBox(
-          height: 52,
-          child: FilledButton.tonalIcon(
-            onPressed: vm.moneda == 'USDT'
-                ? null
-                : () => mostrarCalendarioTasa(context, vm),
-            icon: const Icon(Icons.calendar_month_outlined),
-            label: const Text('Calendario'),
+  ) {
+    final ahora = ahoraVenezuela();
+    final fecha =
+        vm.fechaSeleccionada ??
+        vm.tasa?.fechaEfectiva ??
+        DateTime(ahora.year, ahora.month, ahora.day);
+    final etiquetaFecha = DateFormat('dd/MM/yyyy').format(fecha);
+
+    return Row(
+      children: [
+        Expanded(
+          child: SizedBox(
+            height: 52,
+            child: FilledButton.tonalIcon(
+              key: const Key('selected-rate-date-button'),
+              onPressed: vm.moneda == 'USDT'
+                  ? null
+                  : () => mostrarCalendarioTasa(context, vm),
+              icon: const Icon(Icons.calendar_month_outlined),
+              label: Text(
+                etiquetaFecha,
+                key: const Key('selected-rate-date-label'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ),
         ),
-      ),
-      const SizedBox(width: 12),
-      Expanded(
-        child: SizedBox(
-          height: 52,
-          child: FilledButton.tonalIcon(
-            onPressed: () => _abrirAjustes(settings),
-            icon: const Icon(Icons.settings_outlined),
-            label: const Text('Ajustes'),
+        const SizedBox(width: 12),
+        Expanded(
+          child: SizedBox(
+            height: 52,
+            child: FilledButton.tonalIcon(
+              onPressed: () => _abrirAjustes(settings),
+              icon: const Icon(Icons.settings_outlined),
+              label: const Text('Ajustes'),
+            ),
           ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 
   Widget _buildRateSummary(BuildContext context, ConversorViewmodel vm) {
     final formatoTasa = NumberFormat('#,##0.00', 'es_VE');

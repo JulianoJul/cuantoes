@@ -15,11 +15,13 @@ Actualizado: 28 de septiembre de 2026.
 - APK release final:
   - ABI nativa única `arm64-v8a`.
   - manifiesto `debuggable=false`.
-  - SHA-256: `26eb87ce27afd49272b5eb572ab548033894a751cd60be399d634a8e52bf2ec5`.
+  - SHA-256: `8ac6ecfd9bffd759174e8abfba1a717f18f17d42bc9a2e955433c907990fd6b9`.
   - Esos mismos bytes se instalaron en el Samsung: el contenido queda centrado,
     el selector BCV/P2P conserva más ancho que VES y existe separación visible
     entre «Intercambiar» y «Monto».
   - Gboard abierto: tocar el área vacía cambió `mInputShown=true` a `false`.
+  - El botón que abría «Calendario» muestra `28/09/2026`, la fecha efectiva
+    vigente; tras elegir un histórico refleja la fecha seleccionada.
   - Ajustes publicó `1/3/5/15`; el launcher actualizó los cuatro botones y tocar
     `15` mostró `15,00 USD → 12.855,09 Bs.` sin abrir la app.
 
